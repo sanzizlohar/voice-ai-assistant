@@ -1,0 +1,77 @@
+
+ VOICE AI ASSISTANT — LIVE DEMO  (engine=offline, injected confusion channel 15%)
+ ──────────────────────────────────────────────────────────────────────────────
+ r1 [en] Hello there.                                         greet     85ms
+ r1 [en] What time is it.                                     time      89ms
+ r1 [en] What is twelve plus ask.                             fallback  180ms
+ r1 [en] What is nine minus four.                             math      96ms
+ r1 [en] Set a timer for five minutes.                        timer     126ms
+ r1 [en-en-IN] I will advance the meeting.                          fallback  151ms
+ r1 [en-en-IN] Note pay the electricity bill.                       note      101ms
+ r1 [en-en-IN] What is the weather in kolkata.                      weather   155ms
+ r1 [en-en-IN] Thank you nine much for the help.                    thanks    129ms
+ r1 [es] Hola buenas tardes.                                  greet     81ms
+ r1 [es] Que hora es.                                         greet     49ms
+ r1 [es] Pon una alarma de cinco minutos.                     timer     122ms
+ r1 [es] Nota comprar pan.                                    note      52ms
+ r1 [es] Como esta el clima.                                  weather   133ms
+ r1 [fr] Bonjour comment allez vous.                          greet     77ms
+ r1 [fr] Quelle heure est bonjour.                            greet     70ms
+ r1 [fr] Met un minuteur de dix minutes.                      timer     166ms
+ r1 [fr] Note acheter du pain.                                note      128ms
+ r1 [fr] Quel aide fait bonjour.                              greet     55ms
+ r1 [de] Hallo gern tag.                                      greet     86ms
+ r1 [de] Wie viel uhr ist es.                                 time      126ms
+ r1 [de] Stell einen timer auf funf minuten.                  timer     120ms
+ r1 [de] Notiz milch kaufen.                                  note      59ms
+ r1 [de] Happy clock can now.                                 time      106ms
+ r1 [hi] नमस्ते आप अभी हो.                                    greet     103ms
+ r1 [hi] अभी समय क्या हुआ.                                    time      103ms
+ r1 [hi] पाँच क्या का खरीदना लगाओ.                            fallback  127ms
+ r1 [hi] नोट अठारह खरीदना है.                                 note      114ms
+ r1 [hi] मौसम कैसा है.                                        weather   119ms
+ r1 [bn] নমস্কার আছো আছো.                                     greet     70ms
+ r1 [bn] এখন কয়টা বাজে.                                      time      78ms
+ r1 [bn] নেই মিনিটের টাইমার দাও.                              fallback  141ms
+ r1 [bn] নোট দুধ কিনতে হবে.                                   note      115ms
+ r1 [bn] Anotado configurada.                                 fallback  72ms
+ r2 [en] Hello there.                                         greet     34ms
+ r2 [en] What time is it. → What time ist ist.                time      76ms fixed
+ r2 [en] What is twelve plus ask. → What ist twelve plus thir math      120ms fixed
+ r2 [en] What is nine minus four. → What ist so minus four.   fallback  159ms fixed
+ r2 [en] Set a timer for five minutes.                        timer     101ms
+ r2 [en-en-IN] I will advance the meeting.                          fallback  83ms
+ r2 [en-en-IN] Note pay the electricity bill.                       note      95ms
+ r2 [en-en-IN] What is the weather in kolkata. → What ist the weath weather   101ms fixed
+ r2 [en-en-IN] Thank you nine much for the help. → Thank you so muc thanks    114ms fixed
+ r2 [es] Hola buenas tardes.                                  greet     58ms
+ r2 [es] Que hora es.                                         greet     55ms
+ r2 [es] Pon una alarma de cinco minutos.                     timer     127ms
+ r2 [es] Nota comprar pan.                                    note      37ms
+ r2 [es] Como esta el clima.                                  weather   74ms
+ r2 [fr] Bonjour comment allez vous. → Il comment allez vous. fallback  65ms fixed
+ r2 [fr] Quelle heure est bonjour. → Quelle heure est il.     time      71ms fixed
+ r2 [fr] Met un minuteur de dix minutes.                      timer     120ms
+ r2 [fr] Note acheter du pain.                                note      87ms
+ r2 [fr] Quel aide fait bonjour. → Quel temps fait il.        fallback  117ms fixed
+ r2 [de] Hallo gern tag. → Hallo guten tag.                   greet     49ms fixed
+ r2 [de] Wie viel uhr ist es.                                 time      80ms
+ r2 [de] Stell einen timer auf funf minuten.                  timer     80ms
+ r2 [de] Notiz milch kaufen.                                  note      47ms
+ r2 [de] Happy clock can now. → Wie ist das wetter.           fallback  110ms fixed
+ r2 [hi] नमस्ते आप अभी हो. → नमस्ते आप कैसे हो.               greet     57ms fixed
+ r2 [hi] अभी समय क्या हुआ. → कैसे समय मिनट हुआ.               time      55ms fixed
+ r2 [hi] पाँच क्या का खरीदना लगाओ. → पाँच मिनट का टाइमर लगाओ. timer     109ms fixed
+ r2 [hi] नोट अठारह खरीदना है. → नोट दूध टाइमर है.             note      120ms fixed
+ r2 [hi] मौसम कैसा है.                                        weather   56ms
+ r2 [bn] নমস্কার আছো আছো. → নমস্কার কেমন কেমন.                greet     43ms fixed
+ r2 [bn] এখন কয়টা বাজে.                                      time      54ms
+ r2 [bn] নেই মিনিটের টাইমার দাও. → পাঁচ মিনিটের টাইমার দাও.   timer     113ms fixed
+ r2 [bn] নোট দুধ কিনতে হবে.                                   note      71ms
+ r2 [bn] Anotado configurada. → আবহাওয়া কেমন.                fallback  64ms fixed
+ ──────────────────────────────────────────────────────────────────────────────
+ accuracy  round1  87.1%  →  round2  92.3%   (+5.2 pp from user feedback)   rules 17
+ latency   p50 83ms   p95 141ms   max 180ms   (budget 500ms)
+ rtf       avg 0.040  (responses stream ~25x faster than real time)
+ per-lang  bn 88%  de 94%  en 87%  es 89%  fr 90%  hi 80%
+ ──────────────────────────────────────────────────────────────────────────────

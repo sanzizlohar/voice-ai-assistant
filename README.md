@@ -30,7 +30,24 @@ python -m voice_ai.main synth "namaste, aap kaise ho" --lang hi --out hi.wav
 python -m unittest discover -s tests -t .
 ```
 
-## 🌍 Languages Supported
+---
+
+## 🎬 Live Demo
+
+<video controls autoplay loop>
+  <source src="https://raw.githubusercontent.com/sanzizlohar/voice-ai-assistant/main/docs/demo_screenshot.png" type="image/png">
+</video>
+
+*Voice AI Assistant processing multilingual requests with continuous learning*
+
+| Metric | Value |
+|--------|-------|
+| Voice-to-voice latency (p50) | **47 ms** end-to-end |
+| Server-side processing | 22.6 ms |
+| Real-time factor | **0.0096** (~100× real time) |
+| Sustained throughput | **19.3 req/s** (8 workers) |
+| Daily capacity | ~1.7M requests |
+| WER improvement (learning) | **7.8% → 6.8%** after feedback |
 
 | Code | Language | Script | Notes |
 |------|----------|--------|-------|
@@ -80,9 +97,11 @@ python -m unittest discover -s tests -t .
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 🔁 Continuous Learning — The Core Innovation
+## 🔄 Continuous Learning — The Core Innovation
 
 VIA turns systematic mishearings into an advantage:
+
+![Continuous Learning Loop](docs/learning_loop.png)
 
 ```
 User:    "note buy coffee beans"
@@ -107,6 +126,8 @@ Next:    engine says "but" → rewritten to "buy" automatically
 | Sustained throughput | **19.3 req/s** (8 workers) |
 | Daily capacity | ~1.7M requests |
 | WER improvement (learning) | **7.8% → 6.8%** after feedback |
+
+![Dashboard Mockup](docs/dashboard_mockup.png)
 
 ## 🎮 What Can You Say?
 
