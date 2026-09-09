@@ -1,0 +1,21 @@
+# Voice AI Assistant — runtime: Python 3.9+ standard library only.
+# No third-party packages are required for the agents, codec, learning
+# loop, server, dashboard or tests.
+#
+# Real speech engines (optional, plug in with --engine whisper / TTS):
+#   faster-whisper        # OpenAI Whisper on CTranslate2, int8 quantized
+#   ctranslate2==4.4.0    # pin if the newest wheel segfaults on your CPU
+#   openai-whisper        # classic PyTorch Whisper implementation (alternative)
+#   TTS                   # Coqui TTS for natural speech synthesis
+#
+# Replies are spoken by neural voices when possible, in this order:
+#   edge-tts + miniaudio  # native voices incl. Bengali/Hindi (needs internet)
+#   (Windows SAPI voices) # built into Windows, zero installs, offline
+#   (offline codec)       # universal fallback; hi/bn without internet
+#   TTS                   # Coqui TTS takes top priority if installed
+#
+# numpy (optional) accelerates the offline engine's audio analysis and
+# releases the GIL under load.
+#
+# Dev-only (regenerating README assets in scripts/):
+#   pillow

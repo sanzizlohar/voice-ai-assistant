@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+*.db
+*.sqlite3
+*.sqlite
+*.db-shm
+*.db-wal
+
+# Audio
+*.wav
+*.mp3
+*.ogg
+!tests/data/*.wav
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Generated assets
+assets/*.png
+assets/*.gif
+
+# Logs
+*.log

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice-ai-assistant"
+version = "1.0.0"
+description = "Voice AI Assistant: real-time multi-language speech recognition (Whisper), continuous learning from feedback, Coqui TTS, production HTTP serving"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[project.scripts]
+vai = "voice_ai.main:main"
+
+[tool.setuptools]
+packages = ["voice_ai", "voice_ai.audio", "voice_ai.asr", "voice_ai.text",
+            "voice_ai.learn", "voice_ai.nlu", "voice_ai.tts",
+            "voice_ai.persistence", "voice_ai.server"]
