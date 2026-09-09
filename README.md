@@ -34,9 +34,7 @@ python -m unittest discover -s tests -t .
 
 ## 🎬 Live Demo
 
-<video controls autoplay loop>
-  <source src="https://raw.githubusercontent.com/sanzizlohar/voice-ai-assistant/main/docs/demo_screenshot.png" type="image/png">
-</video>
+![Voice AI Assistant Demo](docs/demo_animation.gif)
 
 *Voice AI Assistant processing multilingual requests with continuous learning*
 
