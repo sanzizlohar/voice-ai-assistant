@@ -57,7 +57,11 @@ PROVIDERS = {
 
 
 def config_path() -> str:
-    return os.path.join(os.getcwd(), "via_llm.json")
+    """Stable location (independent of the server's cwd) — the brain
+    survives restarting the server from any folder."""
+    d = os.path.join(os.path.expanduser("~"), ".via")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "brain.json")
 
 
 def load_config() -> dict | None:
@@ -109,12 +113,12 @@ def engine_from_config(cfg: dict):
 def probe(engine) -> dict:
     """Cheap reachability check: GET /models with a short timeout."""
     try:
-        req = urllib.request.Request(
-            engine.base_url + "/models",
-            headers={"User-Agent": "via",
-                     "Authorization": f"Bearer {engine.api_key}"
-                     if engine.api_key else "User-Agent"})
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
+        headers = {"User-Agent": "via"}
+        if engine.api_key:
+            headers["Authorization"] = f"Bearer {engine.api_key}"
+        req = urllib.request.Request(engine.base_url + "/models",
+                                     headers=headers)
+        with urllib.request.urlopen(req, timeout=4.0) as resp:
             data = json.loads(resp.read().decode())
         models = [m.get("id") for m in data.get("data", []) if m.get("id")]
         return {"ok": True, "models": models[:20]}

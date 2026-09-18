@@ -189,7 +189,7 @@ class TestActionGuard(unittest.TestCase):
         ])
         agent = LlmAgent(llm, ActionCenter(events=None))
         out = agent.answer("clean my disk", "en")
-        self.assertIn("disabled", llm.calls[1][-1]["content"])
+        self.assertIn("approve", llm.calls[1][-1]["content"])
         self.assertEqual(out["tools"], ["run_command"])
 
 

@@ -12,16 +12,30 @@ class TestAllowlist(unittest.TestCase):
         self.assertIn("os", out)
         self.assertIn("cpu_cores", out)
 
-    def test_shell_blocked_by_default(self):
+    def test_shell_needs_consent_by_default(self):
         ac = ActionCenter(events=None)
         out = ac.run("run_command", {"command": "echo hi"})
-        self.assertIn("VIA_SHELL=1", out["error"])
+        self.assertTrue(out["needs_consent"])
+        self.assertIn(out["consent_id"], [c["id"] for c in
+                                          ac.pending_list()])
+        # approving executes it
+        done = ac.resolve_consent(out["consent_id"], allow=True)
+        self.assertTrue(done["approved"])
+        self.assertEqual(done["result"].get("exit_code"), 0)
+        # the id is consumed
+        self.assertIn("error", ac.resolve_consent(out["consent_id"], True))
 
-    def test_shell_opt_in(self):
+    def test_consent_deny(self):
+        ac = ActionCenter(events=None)
+        out = ac.run("linkedin_share", {"text": "hello world"})
+        self.assertTrue(out["needs_consent"])
+        done = ac.resolve_consent(out["consent_id"], allow=False)
+        self.assertTrue(done["denied"])
+
+    def test_shell_opt_in_auto_allows(self):
         ac = ActionCenter(events=None, allow_shell=True)
-        out = ac.run("run_command", {"command": "echo via-test-123"})
+        out = ac.run("run_command", {"command": "echo hi"})
         self.assertEqual(out.get("exit_code"), 0)
-        self.assertIn("via-test-123", out.get("stdout", ""))
 
     def test_unknown_tool(self):
         out = ActionCenter(events=None).run("nope")
@@ -29,15 +43,14 @@ class TestAllowlist(unittest.TestCase):
 
 
 class TestAudit(unittest.TestCase):
-    def test_runs_and_blocks_are_logged(self):
+    def test_runs_and_consents_are_logged(self):
         ev = EventLog()
         ac = ActionCenter(events=ev)
         ac.run("sys_info")
         ac.run("run_command", {"command": "echo x"})
-        events = ev.recent(10)
-        names = [e["event"] for e in events]
+        names = [e["event"] for e in ev.recent(10)]
         self.assertIn("run_sys_info", names)
-        self.assertIn("blocked_run_command", names)
+        self.assertIn("consent_requested_run_command", names)
 
 
 class TestLaunchers(unittest.TestCase):
@@ -57,6 +70,16 @@ class TestLaunchers(unittest.TestCase):
             self.assertIn("notepad", seen[0].lower())
         else:
             self.assertIn("not found", out["error"])
+
+    def test_file_tools(self):
+        ac = ActionCenter(events=None)
+        out = ac.run("search_files", {"query": "page.py", "path": "."})
+        found = [m for m in out["matches"] if m.get("name") == "page.py"]
+        self.assertTrue(found)
+        out = ac.run("read_file", {"path": "voice_ai/server/page.py"})
+        self.assertIn("PAGE", out.get("text", "")[:4000])
+        out = ac.run("read_file", {"path": "no/such/file.txt"})
+        self.assertIn("error", out)
 
     def test_open_app_unknown(self):
         ac = ActionCenter(events=None, launcher=lambda t: None)

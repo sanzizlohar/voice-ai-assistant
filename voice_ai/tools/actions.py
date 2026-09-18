@@ -1,21 +1,38 @@
-"""ActionCenter implementation: allowlist, launchers, web tools."""
+"""ActionCenter: the assistant's hands — allowlist + consent + audit.
+
+Always allowed (read-only / harmless):
+    web_search, read_page, open_url, open_app, open_path, sys_info,
+    list_dir, search_files, read_file, clipboard_write
+
+Consent-gated (act on your PC / outside it) — the dashboard shows an
+Approve/Deny card and the action only runs when you tap Allow:
+    run_command   (arbitrary shell; auto-allowed with VIA_SHELL=1)
+    linkedin_share (stages your post: text → clipboard, LinkedIn feed
+                    opened — you press Post; honest human-in-the-loop)
+
+Every request/run/deny is audited to the event stream.
+"""
 from __future__ import annotations
 
+import fnmatch
 import html.parser
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import urllib.parse
 import urllib.request
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) via-assistant/1.0")
 
-BASE_TOOLS = {"web_search", "read_page", "open_url", "open_app",
-              "sys_info", "list_dir"}
+BASE_TOOLS = {"web_search", "read_page", "open_url", "open_app", "open_path",
+              "sys_info", "list_dir", "search_files", "read_file",
+              "clipboard_write"}
+CONSENT_TOOLS = {"run_command", "linkedin_share"}
 
-# common Windows app resolution: name → candidates (which() name, paths)
 APP_ALIASES = {
     "chrome": ["chrome", r"C:\Program Files\Google\Chrome\Application"
                r"\chrome.exe",
@@ -41,6 +58,9 @@ APP_ALIASES = {
 }
 
 
+# --------------------------------------------------------------------- #
+# HTML helpers (stdlib)
+# --------------------------------------------------------------------- #
 class _DdgParser(html.parser.HTMLParser):
     """Collects DuckDuckGo HTML results (title/url/snippet)."""
 
@@ -55,7 +75,7 @@ class _DdgParser(html.parser.HTMLParser):
         cls = a.get("class", "")
         if tag == "a" and "result__a" in cls:
             if self.cur and self.cur["title"]:
-                self.results.append(self.cur)  # previous hit had no snippet
+                self.results.append(self.cur)  # previous hit, no snippet
             href = a.get("href", "")
             if href.startswith("//duckduckgo.com/l/"):
                 qs = urllib.parse.parse_qs(
@@ -124,26 +144,35 @@ def extract_text(html: str, cap: int = 4000) -> tuple:
 
 
 class ActionCenter:
-    """Executes allowlisted tools; every run is audited via events."""
+    """Executes allowlisted tools; consent-gates powerful ones; audits all."""
 
-    def __init__(self, events=None, launcher=None,
-                 allow_shell: bool | None = None):
+    def __init__(self, events=None, launcher=None, allow_shell: bool | None
+                 = None):
         self.events = events
         self._launch = launcher or self._default_launch
         self.allow_shell = (os.environ.get("VIA_SHELL", "") == "1"
                             if allow_shell is None else allow_shell)
+        self._pending: dict = {}      # consent_id -> {tool, args, ts}
+        self._lock = threading.Lock()
 
+    # ---------------------------------------------------------------- #
+    # dispatch + consent
     # ---------------------------------------------------------------- #
     def run(self, tool: str, args: dict | None = None) -> dict:
         args = args or {}
-        allowed = tool in BASE_TOOLS or (tool == "run_command"
-                                         and self.allow_shell)
-        if not allowed:
+        if tool in BASE_TOOLS:
+            pass
+        elif tool in CONSENT_TOOLS:
+            auto = (tool == "run_command" and self.allow_shell)
+            if not auto:
+                return self._request_consent(tool, args)
+        else:
             self._audit("blocked", tool, args)
-            if tool == "run_command":
-                return {"error": "arbitrary shell is disabled — "
-                         "set VIA_SHELL=1 to enable"}
             return {"error": f"unknown tool '{tool}'"}
+        return self.execute(tool, args)
+
+    def execute(self, tool: str, args: dict) -> dict:
+        """Run an already-approved tool call (used by consent flow too)."""
         handler = getattr(self, f"_tool_{tool}", None)
         if handler is None:
             return {"error": f"unknown tool '{tool}'"}
@@ -156,18 +185,43 @@ class ActionCenter:
         self._audit("run", tool, args)
         return result
 
+    def _request_consent(self, tool: str, args: dict) -> dict:
+        cid = f"c{int(time.time() * 1000) % 10 ** 10}"
+        with self._lock:
+            self._pending[cid] = {"id": cid, "tool": tool, "args": args,
+                                  "ts": time.time()}
+            while len(self._pending) > 20:       # keep the list bounded
+                self._pending.pop(next(iter(self._pending)))
+        self._audit("consent_requested", tool, args)
+        return {"needs_consent": True, "consent_id": cid,
+                "message": (f"about to run '{tool}' on your PC — approve it "
+                            "on the dashboard (Allow/Deny)")}
+
+    def pending_list(self) -> list:
+        with self._lock:
+            return sorted(self._pending.values(), key=lambda c: c["ts"])
+
+    def resolve_consent(self, consent_id: str, allow: bool) -> dict:
+        with self._lock:
+            item = self._pending.pop(consent_id, None)
+        if item is None:
+            return {"error": "unknown or already-handled consent id"}
+        if not allow:
+            self._audit("denied", item["tool"], item["args"])
+            return {"denied": True, "tool": item["tool"]}
+        self._audit("approved", item["tool"], item["args"])
+        return {"approved": True, "tool": item["tool"],
+                "result": self.execute(item["tool"], item["args"])}
+
     def _audit(self, kind: str, tool: str, args: dict) -> None:
         if self.events:
-            self.events.add("warning" if kind == "blocked" else "info",
-                            "tools", f"{kind}_{tool}", str(args)[:160])
+            level = ("warning" if kind in ("blocked", "consent_requested")
+                     else "info")
+            self.events.add(level, "tools", f"{kind}_{tool}", str(args)[:160])
 
     @staticmethod
     def _default_launch(target: str) -> None:
-        """Fire-and-forget: app launches must never block a request.
-        os.startfile can stall in non-interactive contexts, so the launch
-        runs in a daemon thread (exe targets via detached Popen)."""
-        import threading
-
+        """Fire-and-forget: app launches must never block a request."""
         def go():
             try:
                 if os.name == "nt":
@@ -181,8 +235,27 @@ class ActionCenter:
             except Exception:
                 pass
 
-        threading.Thread(target=go, daemon=True,
-                         name="via-launch").start()
+        threading.Thread(target=go, daemon=True, name="via-launch").start()
+
+    # ---------------------------------------------------------------- #
+    # clipboard + social staging (Windows: PowerShell; POSIX: xclip*)
+    # ---------------------------------------------------------------- #
+    @staticmethod
+    def _copy_clipboard(text: str) -> None:
+        if os.name == "nt":
+            ps = f"Set-Clipboard -Value '{text.replace("'", "''")}'"
+            enc = ps.encode("utf-16-le").hex()
+            subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive",
+                 "-EncodedCommand", enc],
+                capture_output=True, timeout=15, check=False)
+        else:
+            for cmd in (["xclip", "-selection", "clipboard"],
+                        ["wl-copy"]):
+                if shutil.which(cmd[0]):
+                    subprocess.run(cmd, input=text.encode(),
+                                   check=False, timeout=10)
+                    return
 
     # ---------------------------------------------------------------- #
     # web tools (stdlib only)
@@ -231,6 +304,13 @@ class ActionCenter:
         self._launch(target)
         return {"opened": name, "path": target}
 
+    def _tool_open_path(self, path: str = "") -> dict:
+        path = os.path.expandvars(path or "").strip()
+        if not path or not os.path.exists(path):
+            return {"error": f"path not found: {path or '(empty)'}"}
+        self._launch(path)
+        return {"opened": path}
+
     def resolve_app(self, name: str) -> str | None:
         for cand in APP_ALIASES.get(name, [name]):
             cand = os.path.expandvars(cand)
@@ -262,13 +342,72 @@ class ActionCenter:
 
     def _tool_list_dir(self, path: str = "") -> dict:
         path = os.path.expandvars(path or os.path.expanduser("~"))
-        return {"path": path, "entries": sorted(os.listdir(path))[:30]}
+        names = sorted(os.listdir(path))
+        dirs = [n for n in names if os.path.isdir(os.path.join(path, n))]
+        files = [n for n in names if n not in dirs]
+        return {"path": path, "folders": dirs[:15], "files": files[:25]}
 
+    def _tool_search_files(self, query: str = "", path: str = "",
+                           limit: int = 25) -> dict:
+        root = os.path.expandvars(path or os.path.expanduser("~"))
+        pattern = f"*{query.lower()}*" if query else "*"
+        hits, t0 = [], time.time()
+        for dirpath, dirnames, filenames in os.walk(root):
+            if time.time() - t0 > 3.0:
+                hits.append({"note": "search truncated (3 s limit)"})
+                break
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith((".", "$"))]
+            for f in filenames:
+                if fnmatch.fnmatch(f.lower(), pattern):
+                    hits.append({"name": f, "path": os.path.join(dirpath, f)})
+                    if len(hits) >= limit:
+                        return {"matches": hits}
+        return {"matches": hits}
+
+    def _tool_read_file(self, path: str = "") -> dict:
+        path = os.path.expandvars(path or "").strip()
+        if not path or not os.path.isfile(path):
+            return {"error": f"file not found: {path or '(empty)'}"}
+        if os.path.getsize(path) > 200_000:
+            return {"error": "file too large (>200 KB) — open it instead"}
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        if b"\x00" in raw[:1024]:
+            return {"error": "binary file — cannot show as text"}
+        return {"path": path, "text": raw.decode("utf-8",
+                                                 errors="replace")[:4000]}
+
+    def _tool_clipboard_write(self, text: str = "") -> dict:
+        text = text or ""
+        if not text:
+            return {"error": "text required"}
+        self._copy_clipboard(text)
+        return {"copied": len(text), "preview": text[:120]}
+
+    # ---------------------------------------------------------------- #
+    # consent-gated actions
+    # ---------------------------------------------------------------- #
     def _tool_run_command(self, command: str = "") -> dict:
-        if not self.allow_shell:
-            return {"error": "shell disabled — set VIA_SHELL=1"}
         out = subprocess.run(command, shell=True, capture_output=True,
                              text=True, timeout=30)
         return {"exit_code": out.returncode,
                 "stdout": out.stdout[:2000],
                 "stderr": out.stderr[:1000]}
+
+    def _tool_linkedin_share(self, text: str = "") -> dict:
+        """Honest human-in-the-loop posting: stage, never auto-post.
+        Copies the text to the clipboard and opens LinkedIn's feed with
+        the share box — the user reviews and presses Post themselves."""
+        text = (text or "").strip()
+        if not text:
+            return {"error": "post text required"}
+        try:
+            self._copy_clipboard(text)
+        except Exception:
+            pass
+        self._launch("https://www.linkedin.com/feed/?shareActive=true")
+        return {"staged": True,
+                "preview": text[:200],
+                "how": "post text is on your clipboard and LinkedIn's "
+                       "share box is open — paste, review, press Post"}

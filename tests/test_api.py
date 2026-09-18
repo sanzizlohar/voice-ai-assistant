@@ -111,6 +111,66 @@ class TestApi(unittest.TestCase):
         self.assertEqual(result["language"], "hi")
         self.assertEqual(result["intent"], "time")
 
+    def test_brain_custom_provider_end_to_end(self):
+        """Connect a custom OpenAI-compatible brain via the API, verify it
+        shows as connected, then chat through it."""
+        import json
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        outer = self
+
+        class FakeLLM(BaseHTTPRequestHandler):
+            def _send(self, obj):
+                body = json.dumps(obj).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):  # probe → /models
+                self._send({"data": [{"id": "stub-brain-model"}]})
+
+            def do_POST(self):  # chat → /chat/completions
+                self._send({"choices": [{"message": {
+                    "role": "assistant",
+                    "content": "The Odyssey was written by Homer."}}]})
+
+            def log_message(self, *args):
+                pass
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), FakeLLM)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            status, body = self.post("/api/brain", json.dumps({
+                "provider": "custom",
+                "base_url": f"http://127.0.0.1:{srv.server_address[1]}/v1",
+                "model": "stub-brain-model",
+                "api_key": "sk-test",
+            }).encode(), "application/json")
+            out = json.loads(body)
+            self.assertEqual(status, 200)
+            self.assertTrue(out["probe"]["ok"], out)
+
+            status, body = self.get("/api/brain")
+            brain = json.loads(body)["current"]
+            self.assertEqual(brain["provider"], "custom")
+            self.assertEqual(brain["engine_name"], "llm:stub-brain-model")
+            self.assertEqual(brain["api_key_masked"], "…test")
+
+            status, body = self.post("/text", json.dumps({
+                "text": "who wrote the odyssey",
+                "session": "brain-e2e", "audio": "0"}).encode(),
+                "application/json")
+            result = json.loads(body)
+            self.assertEqual(result["intent"], "chat")
+            self.assertIn("Homer", result["reply"])
+        finally:
+            srv.shutdown()
+            from voice_ai.llm.config import clear_config
+            clear_config()
+            outer.assistant.set_llm(None)
+
     def test_tts_endpoint(self):
         status, body = self.post("/tts", json.dumps(
             {"text": "hello there", "lang": "en"}).encode(),

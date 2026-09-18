@@ -80,6 +80,7 @@ class Api:
                     "workers": self.executor._max_workers},
             "recent": a.store.recent_utterances(12) if a.store else [],
             "events": a.events.recent(25),
+            "consents": a.actions.pending_list(),
         }
 
     # ---------------------------------------------------------------- #
@@ -116,36 +117,6 @@ class Api:
         if load_config():
             return "saved"
         return "none"
-
-    def _brain(self, body: bytes):
-        """POST /api/brain — save + hot-swap the LLM, or ?action=clear."""
-        from ..llm.config import (PROVIDERS, clear_config, engine_from_config,
-                                  probe, save_config)
-        payload = json.loads(body or b"{}")
-        if payload.get("action") == "clear":
-            clear_config()
-            self.assistant.set_llm(None)
-            self._json(200, {"ok": True, "cleared": True})
-            return
-        provider = (payload.get("provider") or "").strip()
-        if provider not in PROVIDERS:
-            self._json(400, {"error": f"unknown provider '{provider}'"})
-            return
-        try:
-            cfg = save_config(provider,
-                              api_key=(payload.get("api_key") or "").strip(),
-                              model=(payload.get("model") or "").strip(),
-                              base_url=(payload.get("base_url")
-                                        or "").strip())
-        except ValueError as exc:
-            self._json(400, {"error": str(exc)})
-            return
-        engine = engine_from_config(cfg)
-        self.assistant.set_llm(engine)
-        status = probe(engine)
-        self._json(200, {"ok": True, "engine": engine.name,
-                         "probe": status})
-
 
 class QueueFull(Exception):
     pass
@@ -245,6 +216,8 @@ def make_handler(api: Api):
                     self._tts(body)
                 elif path == "/feedback":
                     self._feedback(body)
+                elif path == "/api/consent":
+                    self._consent(body)
                 elif path == "/api/brain":
                     self._brain(body)
                 else:
@@ -330,6 +303,51 @@ def make_handler(api: Api):
                 self._json(400, {"error": "utterance_id_and_text_required"})
                 return
             self._json(200, api.assistant.correct(uid, text))
+
+        def _brain(self, body: bytes):
+            """POST /api/brain — save + hot-swap the LLM, or ?action=clear."""
+            from ..llm.config import (PROVIDERS, clear_config, engine_from_config,
+                                      load_config, probe, save_config)
+            payload = json.loads(body or b"{}")
+            if payload.get("action") == "clear":
+                clear_config()
+                api.assistant.set_llm(None)
+                self._json(200, {"ok": True, "cleared": True})
+                return
+            provider = (payload.get("provider") or "").strip()
+            if provider not in PROVIDERS:
+                self._json(400, {"error": f"unknown provider '{provider}'"})
+                return
+            # keep the previously saved key when the field was left empty
+            api_key = (payload.get("api_key") or "").strip()
+            old = load_config() or {}
+            if not api_key and old.get("provider") == provider and old.get(
+                    "api_key"):
+                api_key = old["api_key"]
+            try:
+                cfg = save_config(provider, api_key=api_key,
+                                  model=(payload.get("model") or "").strip(),
+                                  base_url=(payload.get("base_url")
+                                            or "").strip())
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+                return
+            engine = engine_from_config(cfg)
+            api.assistant.set_llm(engine)
+            status = probe(engine)
+            self._json(200, {"ok": True, "engine": engine.name,
+                             "probe": status})
+
+        def _consent(self, body: bytes):
+            """POST /api/consent {id, allow} — resolve a pending action."""
+            payload = json.loads(body or b"{}")
+            cid = payload.get("id") or ""
+            if not cid:
+                self._json(400, {"error": "consent id required"})
+                return
+            result = api.assistant.actions.resolve_consent(
+                cid, bool(payload.get("allow")))
+            self._json(200, result)
 
         def log_message(self, *args):  # keep the console clean
             pass

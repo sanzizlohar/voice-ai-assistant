@@ -200,6 +200,20 @@ box-shadow:0 8px 24px -10px rgba(139,92,246,.6);
 transition:filter .15s ease}
 #bsave:hover{filter:brightness(1.1)}
 #bsave:disabled{opacity:.5}
+#consents{display:none;position:fixed;right:18px;bottom:18px;width:320px;
+z-index:50;background:var(--card);border:1px solid rgba(245,158,11,.45);
+border-radius:14px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+#consents h3{margin:0 0 6px;font-size:13px}
+.ccard{border-bottom:1px solid var(--line);padding:9px 0}
+.ccard:last-child{border-bottom:0}
+.ccard b{font-size:12.5px}
+.ccard pre{white-space:pre-wrap;word-break:break-all;font-size:11px;
+color:var(--dim);background:var(--bg);border-radius:8px;padding:6px;
+max-height:80px;overflow:auto;margin:6px 0}
+.ccard button{font-family:inherit;font-weight:600;font-size:12px;
+border:0;border-radius:8px;padding:7px 14px;cursor:pointer;margin-right:6px}
+.ccard .allow{background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff}
+.ccard .deny{background:var(--card2);color:var(--dim);border:1px solid var(--line2)}
 </style></head><body>
 <main>
   <header class="card">
@@ -287,6 +301,8 @@ transition:filter .15s ease}
     <div id="bstatus">loading…</div>
   </section>
 
+  <div id="consents"></div>
+
   <footer id="stats">connecting…</footer>
 </main>
 <script>
@@ -311,6 +327,7 @@ async function poll(){
     if(tot)stats+=" · answered in ~"+tot.p50.toFixed(0)+" ms";
     stats+=" · "+(s.learning.active||0)+" things learned";
     $("stats").textContent=stats;
+    renderConsents(s.consents||[]);
   }catch(e){$("stats").textContent="server offline — is it running?"}
 }
 poll(); setInterval(poll,3000);
@@ -464,6 +481,24 @@ if(demo){
   $("typetext").value=demo;sendText();
 }
 
+// ---- consent: the assistant asks, you allow ------------------------- //
+function renderConsents(list){
+  const c=$("consents");
+  if(!list.length){c.style.display="none";c.innerHTML="";return}
+  c.style.display="block";
+  c.innerHTML="<h3>🔒 Permission requested</h3>"+list.map(x=>
+    "<div class='ccard'><b>"+esc(x.tool)+"</b>"+
+    "<pre>"+esc(JSON.stringify(x.args))+"</pre>"+
+    "<button class='allow' onclick='resolveConsent(\""+x.id+"\",true)'>Allow</button>"+
+    "<button class='deny' onclick='resolveConsent(\""+x.id+"\",false)'>Deny</button></div>").join("");
+}
+window.resolveConsent=async(id,allow)=>{
+  try{await fetch("/api/consent",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({id,allow})});}catch(e){}
+  poll();
+};
+
 // ---- brain settings ------------------------------------------------- //
 let BRAIN=null;
 async function loadBrain(){
@@ -483,20 +518,27 @@ function renderBrain(b){
   if(cur.api_key_masked)
     $("bkey").placeholder="API key ("+cur.api_key_masked+") — leave empty to keep";
   onProviderChange();
-  $("bstatus").textContent=cur.engine_name
-    ?("connected: "+cur.engine_name+" · source: "+cur.source)
-    :"no brain connected — general questions need one (Ollama is free & local)";
+  const lp=BRAIN.last_probe;
+  if(cur.engine_name&&!lp)
+    $("bstatus").textContent="connected: "+cur.engine_name+" · source: "+cur.source;
+  else if(cur.engine_name&&lp&&!lp.ok)
+    $("bstatus").textContent="⚠️ saved "+cur.engine_name+" but unreachable: "
+      +(lp.error||"check key/url");
+  else
+    $("bstatus").textContent="no brain connected — general questions need one (Ollama is free & local)";
 }
 function onProviderChange(){
   const p=$("bprovider").value||(BRAIN.current||{}).provider||"";
   const spec=(BRAIN.providers||{})[p];
-  const needs=spec&&spec.needs_key;
-  $("bkey").style.display=needs?"block":"none";
+  const isOllama=p==="ollama";
+  $("bkey").style.display=isOllama?"none":"block";
+  $("bkey").placeholder=spec&&spec.needs_key
+    ?"API key (required)":"API key (optional)";
   $("burl").style.display=(p==="custom")?"block":"none";
   $("bmodels").innerHTML=(spec&&spec.models?spec.models:[])
     .map(m=>"<option value='"+esc(m)+"'>").join("");
   if(spec&&spec.models&&!$("bmodel").value)$("bmodel").value=spec.models[0];
-  if(spec&&spec.base_url&&!$("burl").value.match(/^https?:\/\//))
+  if(spec&&spec.base_url&&!$("burl").value.match(/^https?:\\/\\//))
     $("burl").value=spec.base_url||"";
   $("bhint").textContent=spec?("hint: "+spec.hint):"";
 }

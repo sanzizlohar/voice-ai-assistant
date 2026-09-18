@@ -4,7 +4,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-106_passing-brightgreen.svg)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-109_passing-brightgreen.svg)](#-testing)
 [![Latency](https://img.shields.io/badge/p50_latency-47ms-informational.svg)](#-performance)
 [![No External Dependencies](https://img.shields.io/badge/deps-zero-9cf.svg)](#-tech-stack--design-decisions)
 
@@ -182,7 +182,7 @@ voice-ai-assistant/
 │   ├── pipeline.py     # Core assistant: stages, budgets, sessions
 │   ├── metrics.py      # Thread-safe counters/gauges/histograms
 │   └── main.py         # CLI: demo, serve, transcribe, synth, bench, selftest
-├── tests/              # 106 unit + end-to-end tests
+├── tests/              # 109 unit + end-to-end tests
 ├── scripts/            # load test · live demo capture · diagram generators
 ├── deploy/             # Dockerfile, docker-compose (+Prometheus), k8s HPA
 └── docs/               # GUIDE.md — plain-English walkthrough
@@ -242,9 +242,19 @@ The brain (and the keyword fast path, no LLM needed) can act on your PC:
 | `sys_info`, `list_dir` | machine facts, folder listings |
 | `run_command` | **off by default** — enable with `VIA_SHELL=1` only if you accept the risk |
 
-Safety model: a strict tool allowlist, every execution audited to the
-event stream (visible on the dashboard), results size-capped, and the
-tool loop capped at 3 rounds. Actions fire only from your own requests.
+| Tool | What it does |
+|---|---|
+| `search_files` / `read_file` / `open_path` | **file-explorer work** — find files by name, preview text files, open any file or folder |
+| `clipboard_write` | stage text on your clipboard (drafts, snippets) |
+| `linkedin_share` | **consent-gated posting**: copies your post to the clipboard and opens LinkedIn's share box — *you* review and press Post |
+| `run_command` | **consent-gated** shell (or auto-allowed with `VIA_SHELL=1`) |
+
+Safety model — the assistant asks, you allow: powerful actions return a
+**permission card** on the dashboard (🔒 Allow / Deny) and only run when
+you tap Allow; read-only tools are allowlisted; every request/run/deny
+is audited to the event stream; results are size-capped; the tool loop
+is capped at 3 rounds. Brain settings persist in `~/.via/brain.json`
+(API keys masked in all API responses).
 
 ## 🗣️ Real Speech Setup (Optional)
 
@@ -285,7 +295,7 @@ python -m unittest tests.test_nlu.TestIndic.test_hindi_time -v
 python -m voice_ai.main selftest
 ```
 
-**106 tests, 0 failures, no network required.**
+**109 tests, 0 failures, no network required.**
 
 ## 📄 License
 
