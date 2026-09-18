@@ -26,8 +26,8 @@ PROVIDERS = {
         "label": "Groq (free tier, very fast)",
         "base_url": "https://api.groq.com/openai/v1",
         "needs_key": True,
-        "models": ["llama-3.1-8b-instant", "llama-3.3-70b-versatile",
-                   "gemma2-9b-it"],
+        "models": ["llama-3.3-70b-versatile", "openai/gpt-oss-20b",
+                   "moonshotai/kimi-k2-instruct", "gemma2-9b-it"],
         "hint": "free key at console.groq.com",
     },
     "openai": {

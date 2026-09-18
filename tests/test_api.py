@@ -171,6 +171,7 @@ class TestApi(unittest.TestCase):
             from voice_ai.llm.config import clear_config
             clear_config()
             outer.assistant.set_llm(None)
+            outer.assistant.asr = OfflineCodecAsr()
 
     def test_tts_endpoint(self):
         status, body = self.post("/tts", json.dumps(

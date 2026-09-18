@@ -36,6 +36,7 @@ class Api:
                                            thread_name_prefix="asr")
         self.queue_size = queue_size
         self._in_flight = 0
+        self._last_probe = None
         self._lock = threading.Lock()
 
     # ---------------------------------------------------------------- #
@@ -96,6 +97,7 @@ class Api:
                                                          else "…")
         return {
             "providers": PROVIDERS,
+            "last_probe": self._last_probe,
             "current": {
                 "provider": (cfg or {}).get("provider"),
                 "model": engine.model if engine else None,

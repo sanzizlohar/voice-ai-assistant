@@ -95,6 +95,7 @@ class Assistant:
             self.llm = llm_engine if llm_engine is not None else get_llm()
         self.agent = (LlmAgent(self.llm, self.actions)
                       if self.llm is not None else None)
+        self._llm_error = None
         self.default_language = default_language
 
         self.confusion = ConfusionModel()
@@ -212,6 +213,8 @@ class Assistant:
                 tools = chat.get("tools", [])
                 if chat.get("note"):
                     note = (note + " " + chat["note"]).strip()
+            elif self._llm_error:
+                note = (note + " " + self._llm_error).strip()
 
         # 5. TTS (cached)
         audio_b64 = self._speak(reply, sess.language, stages, want_audio)
@@ -329,11 +332,16 @@ class Assistant:
         # the agent (tools included); local intent answer stands only as
         # the fallback when the agent fails
         tools: list = []
+        note = None
         if self.agent is not None:
             chat = self._maybe_chat(text, lang, stages)
             if chat:
                 intent, reply = "chat", chat["reply"]
                 tools = chat.get("tools", [])
+                if chat.get("note"):
+                    note = chat["note"]
+            elif self._llm_error:
+                note = self._llm_error
 
         audio_b64 = self._speak(reply, lang, stages, want_audio)
         total_ms = round((time.perf_counter() - t_total) * 1000, 2)
@@ -367,7 +375,7 @@ class Assistant:
             "engine": "text", "audio_s": 0.0, "stages": stages,
             "total_ms": total_ms, "rtf": 0.0,
             "rules_fired": [list(f) for f in fired],
-            "tools": tools,
+            "tools": tools, "note": note,
             "wer": None, "budget_ok": total_ms <= TOTAL_BUDGET_MS,
             "intent": intent, "slots": slots, "reply": reply,
             "audio_b64": audio_b64,
@@ -427,9 +435,12 @@ class Assistant:
         try:
             out = self.agent.answer(question, lang)
         except Exception as exc:  # noqa: BLE001 — degrade gracefully
+            self._llm_error = (f"brain failed: {type(exc).__name__}: "
+                               f"{exc}"[:160])
             self.events.add("warning", "llm", "chat_failed",
-                            f"{type(exc).__name__}: {exc}"[:160])
+                            self._llm_error)
             return None
+        self._llm_error = None
         stages["llm_ms"] = round((time.perf_counter() - t0) * 1000, 2)
         self.metrics.inc("llm.chats")
         self.metrics.observe("llm.ms", stages["llm_ms"])
@@ -438,12 +449,34 @@ class Assistant:
         return out
 
     def set_llm(self, engine) -> None:
-        """Hot-swap the brain (dashboard settings / CLI)."""
+        """Hot-swap the brain (dashboard settings / CLI) — and refresh the
+        ASR engine so cloud Whisper activates the moment a Groq/OpenAI
+        brain is connected (Bengali/Hindi voice quality)."""
         self.llm = engine
         self.agent = (LlmAgent(engine, self.actions)
                       if engine is not None else None)
         self.events.add("info", "llm", "brain_set",
                         engine.name if engine else "no brain")
+        try:
+            import threading
+            from .asr.base import get_engine
+            def swap():
+                try:
+                    new_asr = get_engine("auto")
+                    # only ever UPGRADE to cloud ASR; never downgrade a
+                    # locally forced engine (and skip no-op swaps)
+                    if (new_asr.name.startswith("cloud:")
+                            and new_asr.name != self.asr.name):
+                        self.asr = new_asr
+                        self.events.add("info", "asr", "engine_set",
+                                        new_asr.name)
+                except Exception as exc:  # noqa: BLE001
+                    self.events.add("warning", "asr", "swap_failed",
+                                    str(exc)[:120])
+            threading.Thread(target=swap, daemon=True,
+                             name="via-asr-swap").start()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _persist_agent_note(self, text: str) -> None:
         """note_sink for the agent's take_note tool."""

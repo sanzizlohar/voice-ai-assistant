@@ -397,7 +397,7 @@ async function stop(){
   const all=new Float32Array(total);let o=0;
   for(const c of chunks){all.set(c,o);o+=c.length}
   try{
-    const r=await fetch("/transcribe?session=web&audio=1",
+    const r=await fetch("/transcribe?session=web&audio=0",
       {method:"POST",headers:{"Content-Type":"audio/wav"},body:wav16k(all,rate)});
     show(await r.json());
   }catch(e){err("server unreachable")}
@@ -433,7 +433,7 @@ async function sendText(){
     const r=await fetch("/text",{method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({text,session:"web",
-                           audio:DEMO.get("audio","1")})});
+                           audio:"0"})});
     show(await r.json());
   }catch(e){err("server unreachable")}
   orb.classList.remove("busy");
@@ -464,12 +464,28 @@ function show(j){
     audio=new Audio("data:audio/wav;base64,"+j.audio_b64);
     audio.play().catch(()=>{});
     $("play").style.display="inline-block";
+  } else if(j.reply){
+    speakReply(j.reply,j.language);   // text now, voice in background
   }
   const teach=DEMO.get("teach");   // capture hook: auto-submit a correction
   if(teach&&j.id&&!j.__taught){j.__taught=true;
     $("fbtext").value=teach;$("send").click();}
 }
 $("play").onclick=()=>{if(audio)audio.play().catch(()=>{})};
+async function speakReply(text,lang){
+  try{
+    $("status").className="";$("status").textContent="🔊 speaking…";
+    const r=await fetch("/tts",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({text,lang})});
+    if(!r.ok)throw 0;
+    audio=new Audio(URL.createObjectURL(await r.blob()));
+    audio.play().catch(()=>{});
+    $("play").style.display="inline-block";
+    $("play").onclick=()=>{if(audio)audio.play().catch(()=>{})};
+    $("status").textContent="";
+  }catch(e){$("status").textContent=""}
+}
 const demo=DEMO.get("demo");       // capture hook: auto-run a command
 if(demo){
   // hidden <img> to /slow keeps the window load event pending until the
@@ -535,9 +551,11 @@ function onProviderChange(){
   $("bkey").placeholder=spec&&spec.needs_key
     ?"API key (required)":"API key (optional)";
   $("burl").style.display=(p==="custom")?"block":"none";
-  $("bmodels").innerHTML=(spec&&spec.models?spec.models:[])
-    .map(m=>"<option value='"+esc(m)+"'>").join("");
-  if(spec&&spec.models&&!$("bmodel").value)$("bmodel").value=spec.models[0];
+  const live=(BRAIN.last_probe&&BRAIN.last_probe.ok
+    &&BRAIN.last_probe.models)||[];
+  const models=live.length?live:(spec&&spec.models?spec.models:[]);
+  $("bmodels").innerHTML=models.map(m=>"<option value='"+esc(m)+"'>").join("");
+  if(models&&!$("bmodel").value)$("bmodel").value=models[0];
   if(spec&&spec.base_url&&!$("burl").value.match(/^https?:\\/\\//))
     $("burl").value=spec.base_url||"";
   $("bhint").textContent=spec?("hint: "+spec.hint):"";
