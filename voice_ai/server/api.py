@@ -82,6 +82,70 @@ class Api:
             "events": a.events.recent(25),
         }
 
+    # ---------------------------------------------------------------- #
+    # Brain settings (provider / key / model / base-url)
+    # ---------------------------------------------------------------- #
+    def brain_state(self) -> dict:
+        from ..llm.config import PROVIDERS, load_config
+        a = self.assistant
+        cfg = load_config()
+        engine = a.llm
+        key = (cfg or {}).get("api_key", "")
+        masked = ("…" + key[-4:]) if len(key) >= 6 else ("" if not key
+                                                         else "…")
+        return {
+            "providers": PROVIDERS,
+            "current": {
+                "provider": (cfg or {}).get("provider"),
+                "model": engine.model if engine else None,
+                "base_url": engine.base_url if engine else None,
+                "api_key_masked": masked,
+                "engine_name": engine.name if engine else None,
+                "source": self._brain_source(),
+            },
+        }
+
+    @staticmethod
+    def _brain_source() -> str:
+        import os
+        from ..llm.config import load_config
+        if (os.environ.get("VIA_LLM_BASE_URL")
+                or os.environ.get("VIA_LLM_API_KEY")
+                or os.environ.get("VIA_LLM_MODEL")):
+            return "env"
+        if load_config():
+            return "saved"
+        return "none"
+
+    def _brain(self, body: bytes):
+        """POST /api/brain — save + hot-swap the LLM, or ?action=clear."""
+        from ..llm.config import (PROVIDERS, clear_config, engine_from_config,
+                                  probe, save_config)
+        payload = json.loads(body or b"{}")
+        if payload.get("action") == "clear":
+            clear_config()
+            self.assistant.set_llm(None)
+            self._json(200, {"ok": True, "cleared": True})
+            return
+        provider = (payload.get("provider") or "").strip()
+        if provider not in PROVIDERS:
+            self._json(400, {"error": f"unknown provider '{provider}'"})
+            return
+        try:
+            cfg = save_config(provider,
+                              api_key=(payload.get("api_key") or "").strip(),
+                              model=(payload.get("model") or "").strip(),
+                              base_url=(payload.get("base_url")
+                                        or "").strip())
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+            return
+        engine = engine_from_config(cfg)
+        self.assistant.set_llm(engine)
+        status = probe(engine)
+        self._json(200, {"ok": True, "engine": engine.name,
+                         "probe": status})
+
 
 class QueueFull(Exception):
     pass
@@ -157,6 +221,8 @@ def make_handler(api: Api):
                            "text/plain; version=0.0.4")
             elif path == "/api/state":
                 self._json(200, api.state())
+            elif path == "/api/brain":
+                self._json(200, api.brain_state())
             else:
                 self._json(404, {"error": "not_found"})
 
@@ -179,6 +245,8 @@ def make_handler(api: Api):
                     self._tts(body)
                 elif path == "/feedback":
                     self._feedback(body)
+                elif path == "/api/brain":
+                    self._brain(body)
                 else:
                     self._json(404, {"error": "not_found"})
             except QueueFull:

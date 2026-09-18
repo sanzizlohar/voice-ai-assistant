@@ -12,7 +12,7 @@ import datetime as _dt
 from ..text.normalize import LANGUAGES, join_tokens, spell_time
 
 # order matters: most specific first
-PRIORITY = ("math", "timer", "note", "weather", "greet", "time",
+PRIORITY = ("math", "timer", "note", "pc", "weather", "greet", "time",
             "thanks", "help", "goodbye")
 
 
@@ -54,6 +54,11 @@ TIMER_UNITS = {
 
 
 class IntentEngine:
+    def __init__(self, actions=None):
+        # ActionCenter injection lets "open chrome" launch the real app
+        # (tests pass a stub); without it the pc intent never matches
+        self.actions = actions
+
     def handle(self, tokens: list[str], lang: str,
                transcript_display: str = "") -> tuple:
         """Returns (intent, slots, reply_text). Keyword matching is exact
@@ -137,6 +142,21 @@ class IntentEngine:
         reply = (LANGUAGES[lang].responses["timer"][0]
                  .replace("{n}", str(n)).replace("{unit}", unit))
         return ("timer", {"n": n, "unit": canon}, reply)
+
+    def _intent_pc(self, low, lang, hit):
+        idx = low.index(hit)
+        stop = {"the", "a", "an", "please", "app", "को", "करो"}
+        app = " ".join(t for t in low[idx + 1:] if t not in stop)
+        if not app or self.actions is None:
+            return None
+        result = self.actions.run("open_app", {"name": app})
+        if result.get("opened"):
+            reply = (LANGUAGES[lang].responses["pc"][0]
+                     .replace("{app}", app.title()))
+        else:
+            reply = (LANGUAGES[lang].responses["pc"][1]
+                     .replace("{app}", app.title()))
+        return ("pc", {"app": app}, reply)
 
     def _intent_weather(self, low, lang, hit):
         return ("weather", {}, LANGUAGES[lang].responses["weather"][0])

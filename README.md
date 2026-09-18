@@ -4,7 +4,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-82_passing-brightgreen.svg)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-106_passing-brightgreen.svg)](#-testing)
 [![Latency](https://img.shields.io/badge/p50_latency-47ms-informational.svg)](#-performance)
 [![No External Dependencies](https://img.shields.io/badge/deps-zero-9cf.svg)](#-tech-stack--design-decisions)
 
@@ -72,6 +72,8 @@ and answers in your language:
 | "what is twelve plus thirty" | Computes and speaks the result |
 | "set a timer for five minutes" / "পাঁচ মিনিটের টাইমার দাও" | Confirms the timer |
 | "note buy milk tomorrow" | Stores a note |
+| "open chrome" / "open notepad" | **Launches the app on your PC** |
+| "who wrote the odyssey" / "explain quantum computing" | Asks the **LLM brain** — it can search the web first |
 | Anything misheard | Correct it once — **it learns and stops repeating the mistake** |
 
 Beyond the demo commands, the pipeline is the product: intents are
@@ -156,6 +158,8 @@ curl http://localhost:8080/api/state    # Dashboard snapshot
 | **Offline tone codec** | Test double for acoustic models — words → tone sequences → decoded with Goertzel filtering. Real DSP, no downloads needed |
 | **numpy (optional)** | Vectorized DFT for 4× faster decode; releases GIL for true parallelism |
 | **Whisper adapter** | `faster-whisper` with int8 quantization; auto language detection with a tiny-model second opinion and native-script prompts for हिन्दी/বাংলা |
+| **LLM brain adapter** | Any OpenAI-compatible provider via stdlib `urllib`; ReAct-style JSON tool loop works with every model — no vendor SDK |
+| **ActionCenter** | Allowlisted PC/web tools with full audit trail; launches are fire-and-forget so they never block the reply |
 | **Edge / Coqui / SAPI TTS** | Native neural voices for Bengali, Hindi, English…; Windows system voices offline; graceful fallback to the offline codec |
 | **SQLite (WAL)** | Zero-setup persistence with per-request commits off the hot path |
 | **ThreadingHTTPServer** | Live dashboard with browser mic capture, zero dependencies |
@@ -169,6 +173,8 @@ voice-ai-assistant/
 │   ├── asr/            # Engine interface, offline codec, Whisper adapter, WER
 │   ├── text/           # Language registry, dialects, normalization
 │   ├── learn/          # Confusion model, hotwords, accuracy tracker
+│   ├── llm/            # Brain: OpenAI-compatible chat + ReAct tool loop
+│   ├── tools/          # ActionCenter: web search/read, PC actions
 │   ├── nlu/            # Intent engine + multilingual responses
 │   ├── tts/            # offline codec · Windows SAPI · Edge neural · Coqui
 │   ├── persistence/    # SQLite store (utterances, feedback, rules)
@@ -176,7 +182,7 @@ voice-ai-assistant/
 │   ├── pipeline.py     # Core assistant: stages, budgets, sessions
 │   ├── metrics.py      # Thread-safe counters/gauges/histograms
 │   └── main.py         # CLI: demo, serve, transcribe, synth, bench, selftest
-├── tests/              # 82 unit + end-to-end tests
+├── tests/              # 106 unit + end-to-end tests
 ├── scripts/            # load test · live demo capture · diagram generators
 ├── deploy/             # Dockerfile, docker-compose (+Prometheus), k8s HPA
 └── docs/               # GUIDE.md — plain-English walkthrough
@@ -195,6 +201,50 @@ kubectl apply -f deploy/k8s.yaml   # 3 replicas + HPA
 ```
 
 One pod sustains ~19 req/s (~1.7M/day) with p95 under 500ms.
+
+## 🧠 Give It a Brain (LLM)
+
+Connect any OpenAI-compatible model and the assistant answers *general*
+questions — spoken aloud, in your language — and can **search the web**
+and **run PC tasks** mid-answer (tools are injected into the model's
+reasoning loop).
+
+**Option A — dashboard (easiest):** the "LLM brain" panel at the bottom
+of the page → pick a provider → paste the key → Connect. Hot-swaps live.
+
+**Option B — CLI:**
+```bash
+python -m voice_ai.main brain                          # list providers
+python -m voice_ai.main brain --provider groq --key gsk_...     --model llama-3.1-8b-instant
+python -m voice_ai.main ask "who wrote the odyssey?"
+```
+
+**Option C — env vars:** `VIA_LLM_BASE_URL` / `VIA_LLM_API_KEY` /
+`VIA_LLM_MODEL`.
+
+| Provider | Cost | Notes |
+|---|---|---|
+| `ollama` | free, local | auto-detected when running — `ollama pull llama3.2` |
+| `groq` | free tier | fastest replies, `llama-3.1-8b-instant` |
+| `openai` | paid | `gpt-4o-mini` is cheap and solid |
+| `openrouter` | free models exist | 100+ models behind one key |
+| `custom` | — | any OpenAI-compatible URL (LM Studio, vLLM…) |
+
+## 🛠️ PC Tasks & Web — with a safety model
+
+The brain (and the keyword fast path, no LLM needed) can act on your PC:
+
+| Tool | What it does |
+|---|---|
+| `open_app` | launches apps — chrome, notepad, calculator, spotify, vscode… |
+| `open_url` | opens websites |
+| `web_search` / `read_page` | DuckDuckGo search + page text extraction (stdlib) |
+| `sys_info`, `list_dir` | machine facts, folder listings |
+| `run_command` | **off by default** — enable with `VIA_SHELL=1` only if you accept the risk |
+
+Safety model: a strict tool allowlist, every execution audited to the
+event stream (visible on the dashboard), results size-capped, and the
+tool loop capped at 3 rounds. Actions fire only from your own requests.
 
 ## 🗣️ Real Speech Setup (Optional)
 
@@ -235,7 +285,7 @@ python -m unittest tests.test_nlu.TestIndic.test_hindi_time -v
 python -m voice_ai.main selftest
 ```
 
-**82 tests, 0 failures, no network required.**
+**106 tests, 0 failures, no network required.**
 
 ## 📄 License
 

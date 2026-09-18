@@ -140,3 +140,21 @@ Speak any of the corpus languages — including English with Indian
 vocabulary ("i will prepone the meeting"), Hindi ("पाँच मिनट का टाइमर
 लगाओ") or Bengali ("এখন কয়টা বাজে"). Correct it when it's wrong — and
 watch the green "fixed" lines appear.
+
+## 6. The brain, the hands and the eyes
+
+The intent keywords handle the familiar commands fast and offline. But
+what about "who wrote the odyssey"? That goes to the **LLM brain**:
+
+1. Nothing matches an intent → the utterance is routed to the configured
+   model (Ollama locally, or Groq/OpenAI/OpenRouter/custom via an API
+   key you paste in the dashboard's Brain panel).
+2. The model can answer directly, or reply with a JSON tool call.
+3. The **ActionCenter** executes it — `web_search`, `read_page`,
+   `open_app`, `open_url`, `sys_info`, `list_dir` — and feeds the
+   observation back. Up to 3 rounds, then the final text is spoken.
+
+Safety: the tool list is a strict allowlist; arbitrary shell commands
+stay disabled unless you set `VIA_SHELL=1`; every action is written to
+the auditable event stream. The "open X" fast path ("open chrome") runs
+without any LLM — it's a keyword intent that launches apps directly.

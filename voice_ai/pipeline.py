@@ -23,10 +23,12 @@ from .audio.wavio import TARGET_SR, resample, write_wav
 from .learn.confusion import ConfusionModel
 from .learn.tracker import AccuracyTracker
 from .learn.vocab import HotwordSet
+from .llm.base import LlmAgent, get_llm
 from .metrics import EventLog, Metrics
 from .nlu.intents import IntentEngine
 from .persistence.store import Store
 from .text.normalize import LANGUAGES, join_tokens, tokenize
+from .tools.actions import ActionCenter
 from .tts.base import get_tts
 
 # voice-to-voice latency budget per stage (ms). The offline engine beats
@@ -76,14 +78,19 @@ class Assistant:
     def __init__(self, asr_engine=None, tts_engine=None,
                  store: Store | None = None, metrics: Metrics | None = None,
                  events: EventLog | None = None, want_tts: bool = True,
-                 default_language: str = "en"):
+                 default_language: str = "en",
+                 llm_engine=None, actions=None):
         self.asr = asr_engine or get_engine("auto")
         self.tts = tts_engine if tts_engine is not None else (
             get_tts("auto") if want_tts else None)
         self.store = store or Store()
         self.metrics = metrics or Metrics()
         self.events = events or EventLog()
-        self.nlu = IntentEngine()
+        self.actions = actions or ActionCenter(events=self.events)
+        self.nlu = IntentEngine(actions=self.actions)
+        self.llm = llm_engine if llm_engine is not None else get_llm()
+        self.agent = (LlmAgent(self.llm, self.actions)
+                      if self.llm is not None else None)
         self.default_language = default_language
 
         self.confusion = ConfusionModel()
@@ -189,6 +196,19 @@ class Assistant:
                 [t for t in tokens if t != UNK], sess.language))
         stages["nlu_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
+        # 4b. brain: unhandled utterances go to the LLM (with web/PC tools)
+        tools: list = []
+        note = hyp.note
+        if intent == "fallback":
+            question = join_tokens([t for t in hyp.tokens if t != UNK],
+                                   sess.language)
+            chat = self._maybe_chat(question, sess.language, stages)
+            if chat:
+                intent, reply = "chat", chat["reply"]
+                tools = chat.get("tools", [])
+                if chat.get("note"):
+                    note = (note + " " + chat["note"]).strip()
+
         # 5. TTS (cached)
         audio_b64 = self._speak(reply, sess.language, stages, want_audio)
 
@@ -229,9 +249,10 @@ class Assistant:
             "total_ms": total_ms,
             "rtf": round(total_ms / 1000.0 / max(speech_s, 1e-6), 4),
             "rules_fired": [list(f) for f in fired],
+            "tools": tools,
             "wer": round(w, 4) if w is not None else None,
             "budget_ok": total_ms <= TOTAL_BUDGET_MS,
-            "note": hyp.note,
+            "note": note,
         }
         sess.turns += 1
         sess.history.append({"id": utt_id, "language": sess.language,
@@ -300,6 +321,14 @@ class Assistant:
                 [t for t in tokens if t != UNK], lang))
         stages["nlu_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
+        # brain: unhandled text goes to the LLM (with web/PC tools)
+        tools: list = []
+        if intent == "fallback":
+            chat = self._maybe_chat(text, lang, stages)
+            if chat:
+                intent, reply = "chat", chat["reply"]
+                tools = chat.get("tools", [])
+
         audio_b64 = self._speak(reply, lang, stages, want_audio)
         total_ms = round((time.perf_counter() - t_total) * 1000, 2)
         stages["total_ms"] = total_ms
@@ -332,6 +361,7 @@ class Assistant:
             "engine": "text", "audio_s": 0.0, "stages": stages,
             "total_ms": total_ms, "rtf": 0.0,
             "rules_fired": [list(f) for f in fired],
+            "tools": tools,
             "wer": None, "budget_ok": total_ms <= TOTAL_BUDGET_MS,
             "intent": intent, "slots": slots, "reply": reply,
             "audio_b64": audio_b64,
@@ -379,6 +409,37 @@ class Assistant:
                 "wer_after": round(wer_after, 4)}
 
     # ---------------------------------------------------------------- #
+    # Brain (LLM): general questions + tool-driven tasks
+    # ---------------------------------------------------------------- #
+    def _maybe_chat(self, question: str, lang: str, stages: dict) -> dict:
+        """Route an unhandled utterance to the LLM agent. Returns
+        {"reply", "tools", "note"?} or None when no brain is configured
+        (the intent fallback reply stands)."""
+        if self.agent is None:
+            return None
+        t0 = time.perf_counter()
+        try:
+            out = self.agent.answer(question, lang)
+        except Exception as exc:  # noqa: BLE001 — degrade gracefully
+            self.events.add("warning", "llm", "chat_failed",
+                            f"{type(exc).__name__}: {exc}"[:160])
+            return None
+        stages["llm_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+        self.metrics.inc("llm.chats")
+        self.metrics.observe("llm.ms", stages["llm_ms"])
+        self.events.add("info", "llm", "chat",
+                        f"{question[:40]} → tools={out.get('tools', [])}")
+        return out
+
+    def set_llm(self, engine) -> None:
+        """Hot-swap the brain (dashboard settings / CLI)."""
+        self.llm = engine
+        self.agent = (LlmAgent(engine, self.actions)
+                      if engine is not None else None)
+        self.events.add("info", "llm", "brain_set",
+                        engine.name if engine else "no brain")
+
+    # ---------------------------------------------------------------- #
     def _next_id(self) -> str:
         return f"u{next(self._ids):06d}"
 
@@ -398,6 +459,7 @@ class Assistant:
                          "hotwords": self.hotwords.snapshot(),
                          "accuracy": self.tracker.snapshot()},
             "engine": {"asr": self.asr.name,
-                       "tts": self.tts.name if self.tts else "disabled"},
+                       "tts": self.tts.name if self.tts else "disabled",
+                       "llm": self.llm.name if self.llm else None},
             "sessions": len(self._sessions),
         }

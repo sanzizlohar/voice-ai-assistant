@@ -293,6 +293,57 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_brain(args) -> int:
+    from .llm.config import (PROVIDERS, clear_config, engine_from_config,
+                             load_config, probe, save_config)
+    if args.clear:
+        print(f" brain cleared: {clear_config()}")
+        return 0
+    if args.provider:
+        try:
+            cfg = save_config(args.provider, api_key=args.key or "",
+                              model=args.model or "",
+                              base_url=args.base_url or "")
+        except ValueError as exc:
+            print(f" error: {exc}")
+            return 1
+        engine = engine_from_config(cfg)
+        status = probe(engine)
+        print(f" brain saved: {engine.name} @ {cfg['base_url']}")
+        print(f" reachable: {status['ok']}"
+              + ("" if status["ok"] else f" ({status.get('error')})"))
+        return 0 if status["ok"] else 1
+    cfg = load_config()
+    print(" providers:")
+    for name, spec in PROVIDERS.items():
+        print(f"   {name:11} {spec['label']}  — {spec['hint']}")
+    if cfg:
+        print(f" saved: {cfg['provider']} · {cfg['model']} @ "
+              f"{cfg['base_url']} (key {'set' if cfg['api_key'] else 'none'})")
+    else:
+        print(" saved: none — use --provider/--key/--model, or the "
+              "dashboard Brain panel")
+    return 0
+
+
+def cmd_ask(args) -> int:
+    from .asr.offline import OfflineCodecAsr
+    a = Assistant(asr_engine=OfflineCodecAsr(), store=Store(":memory:"),
+                  want_tts=False)
+    a.warmup()
+    r = a.process_text(args.question, session_id="cli", want_audio=False)
+    if r.get("error"):
+        print(f" {r['error']}")
+        return 1
+    print(f" [{r['language']}/{r['intent']}] {r['reply']}")
+    if r.get("tools"):
+        print(f" tools used: {', '.join(r['tools'])}")
+    if r.get("note"):
+        print(f" note: {r['note']}")
+    a.store.close()
+    return 0
+
+
 def cmd_selftest(args) -> int:
     _enable_ansi()
     failures: list[str] = []
@@ -421,6 +472,23 @@ def main(argv: list | None = None) -> int:
 
     sf = sub.add_parser("selftest", parents=[common], help="pipeline smoke test (exit 0/1)")
     sf.set_defaults(func=cmd_selftest)
+
+    br = sub.add_parser("brain", parents=[common],
+                        help="LLM brain: show / set / clear provider")
+    br.add_argument("--provider", default=None,
+                    help="ollama | groq | openai | openrouter | custom")
+    br.add_argument("--key", default=None, help="API key for the provider")
+    br.add_argument("--model", default=None, help="model name")
+    br.add_argument("--base-url", default=None,
+                    help="custom OpenAI-compatible base url")
+    br.add_argument("--clear", action="store_true",
+                    help="remove the saved brain")
+    br.set_defaults(func=cmd_brain)
+
+    ak = sub.add_parser("ask", parents=[common],
+                        help="ask one question (uses the LLM brain + tools)")
+    ak.add_argument("question")
+    ak.set_defaults(func=cmd_ask)
 
     args = p.parse_args(argv)
     args.engine = args.engine or "auto"

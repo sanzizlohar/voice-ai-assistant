@@ -179,6 +179,27 @@ transition:filter .15s ease,transform .15s ease}
 
 footer{margin-top:4px;text-align:center;color:var(--dim2);font-size:11.5px;
 font-variant-numeric:tabular-nums}
+
+#brain .label{padding:14px 16px 0;margin:0}
+.brainrow{display:flex;gap:8px;padding:12px 16px 0;flex-wrap:wrap}
+#brain select,#brain input{font-family:inherit;font-size:13.5px;
+color:var(--ink);background:var(--bg);border:1px solid var(--line2);
+border-radius:10px;padding:10px 12px;outline:none;
+transition:border-color .15s ease,box-shadow .15s ease}
+#brain select:focus,#brain input:focus{border-color:rgba(139,92,246,.65);
+box-shadow:0 0 0 3px rgba(139,92,246,.15)}
+#brain select{flex:1;min-width:170px}
+#bkey,#bmodel{flex:1;min-width:130px}
+#burl{display:none;margin:8px 16px 0;width:calc(100% - 32px)}
+#bhint{padding:8px 16px 0;color:var(--dim2);font-size:12px}
+#bstatus{padding:8px 16px 14px;font-size:12.5px;color:var(--dim)}
+#bsave{font-family:inherit;font-weight:600;font-size:13px;color:#fff;
+background:linear-gradient(135deg,#8b5cf6,#6366f1);border:0;
+border-radius:11px;padding:11px 20px;cursor:pointer;
+box-shadow:0 8px 24px -10px rgba(139,92,246,.6);
+transition:filter .15s ease}
+#bsave:hover{filter:brightness(1.1)}
+#bsave:disabled{opacity:.5}
 </style></head><body>
 <main>
   <header class="card">
@@ -251,6 +272,21 @@ font-variant-numeric:tabular-nums}
     <div id="fbres"></div>
   </div>
 
+  <section class="card" id="brain">
+    <p class="label">LLM brain — connect any model, ask anything</p>
+    <div class="brainrow">
+      <select id="bprovider"></select>
+      <input id="bkey" type="password" placeholder="API key"
+             autocomplete="off" style="display:none">
+      <input id="bmodel" list="bmodels" placeholder="model">
+      <datalist id="bmodels"></datalist>
+      <button id="bsave">Connect</button>
+    </div>
+    <input id="burl" placeholder="base url — e.g. http://localhost:1234/v1">
+    <div id="bhint"></div>
+    <div id="bstatus">loading…</div>
+  </section>
+
   <footer id="stats">connecting…</footer>
 </main>
 <script>
@@ -266,7 +302,8 @@ let last=null, recState="idle", stream=null, ctx=null, processor=null,
 async function poll(){
   try{
     const s=await (await fetch("/api/state")).json();
-    $("engine").textContent=s.engine.asr+" · "+s.engine.tts;
+    $("engine").textContent=s.engine.asr+" · "+s.engine.tts+
+      (s.engine.llm?" · 🧠 "+s.engine.llm:"");
     const acc=(s.learning.accuracy||{}).accuracy;
     const st=s.stages||{}, tot=st["pipeline.total_ms"];
     let stats=s.utterances+" commands handled";
@@ -401,7 +438,8 @@ function show(j){
   else{$("note").style.display="none"}
   const src=j.engine==="text"?"⌨️ typed":"🎙️ spoken";
   $("rmeta").textContent=src+" · answered in "+(j.total_ms/1000).toFixed(2)
-    +" s · say it again and it may answer even smarter";
+    +" s · say it again and it may answer even smarter"
+    +(j.tools&&j.tools.length?" · 🛠 "+j.tools.join(", "):"");
   $("result").style.display="block";
   $("teach").style.display="flex";$("fbres").textContent="";
   $("result").scrollIntoView({behavior:"smooth",block:"nearest"});
@@ -425,6 +463,67 @@ if(demo){
   document.body.appendChild(hold);
   $("typetext").value=demo;sendText();
 }
+
+// ---- brain settings ------------------------------------------------- //
+let BRAIN=null;
+async function loadBrain(){
+  try{
+    const r=await fetch("/api/brain");
+    BRAIN=await r.json();
+    renderBrain(BRAIN);
+  }catch(e){$("bstatus").textContent="brain settings unavailable"}
+}
+function renderBrain(b){
+  const cur=b.current||{};
+  $("bprovider").innerHTML="<option value=''>— choose provider —</option>"+
+    Object.entries(b.providers).map(([k,p])=>
+      "<option value='"+k+"'"+(cur.provider===k?" selected":"")+">"+
+      esc(p.label)+"</option>").join("");
+  if(cur.model)$("bmodel").value=cur.model;
+  if(cur.api_key_masked)
+    $("bkey").placeholder="API key ("+cur.api_key_masked+") — leave empty to keep";
+  onProviderChange();
+  $("bstatus").textContent=cur.engine_name
+    ?("connected: "+cur.engine_name+" · source: "+cur.source)
+    :"no brain connected — general questions need one (Ollama is free & local)";
+}
+function onProviderChange(){
+  const p=$("bprovider").value||(BRAIN.current||{}).provider||"";
+  const spec=(BRAIN.providers||{})[p];
+  const needs=spec&&spec.needs_key;
+  $("bkey").style.display=needs?"block":"none";
+  $("burl").style.display=(p==="custom")?"block":"none";
+  $("bmodels").innerHTML=(spec&&spec.models?spec.models:[])
+    .map(m=>"<option value='"+esc(m)+"'>").join("");
+  if(spec&&spec.models&&!$("bmodel").value)$("bmodel").value=spec.models[0];
+  if(spec&&spec.base_url&&!$("burl").value.match(/^https?:\/\//))
+    $("burl").value=spec.base_url||"";
+  $("bhint").textContent=spec?("hint: "+spec.hint):"";
+}
+$("bprovider").addEventListener("change",onProviderChange);
+$("bsave").onclick=async()=>{
+  const body={provider:$("bprovider").value,
+    api_key:$("bkey").value.trim(),
+    model:$("bmodel").value.trim(),
+    base_url:$("burl").value.trim()};
+  if(!body.provider){$("bstatus").textContent="pick a provider first";return}
+  $("bsave").disabled=true;
+  try{
+    const r=await fetch("/api/brain",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body)});
+    const j=await r.json();
+    if(j.error)$("bstatus").textContent="error: "+j.error;
+    else if(j.probe&&j.probe.ok)
+      $("bstatus").textContent="✅ connected — "+j.engine+
+        " is live; ask me anything, I can search the web and run PC tasks";
+    else $("bstatus").textContent="saved, but the provider didn't respond: "+
+        ((j.probe||{}).error||"check key/url");
+    await loadBrain();
+  }catch(e){$("bstatus").textContent="server unreachable"}
+  $("bsave").disabled=false;
+};
+loadBrain();
 
 // ---- teach ---------------------------------------------------------- //
 $("send").onclick=async()=>{
