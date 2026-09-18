@@ -172,7 +172,7 @@ voice-ai-assistant/
 │   ├── nlu/            # Intent engine + multilingual responses
 │   ├── tts/            # offline codec · Windows SAPI · Edge neural · Coqui
 │   ├── persistence/    # SQLite store (utterances, feedback, rules)
-│   ├── server/         # HTTP API, live sketch dashboard, Prometheus metrics
+│   ├── server/         # HTTP API, live dark-minimal dashboard, Prometheus metrics
 │   ├── pipeline.py     # Core assistant: stages, budgets, sessions
 │   ├── metrics.py      # Thread-safe counters/gauges/histograms
 │   └── main.py         # CLI: demo, serve, transcribe, synth, bench, selftest

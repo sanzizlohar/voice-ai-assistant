@@ -1,12 +1,16 @@
-"""Single-page demo UI — colorful hand-drawn "sketchbook" theme.
+"""Single-page demo UI — dark modern minimalist theme.
 
-Design goals (user-requested): eye-catchy, playful sketch look, and zero
-ambiguity — every section says in plain words what to do and what
-happened. Three ways in: talk (mic), type (no mic needed), or click an
-example chip. Audio is captured with AudioContext and encoded to 16 kHz
-mono PCM WAV client-side — the server needs no ffmpeg. (The
-ScriptProcessorNode is held in a module variable: browsers garbage-collect
-it mid-recording otherwise, which silently kills the mic.)
+Design language: deep-zinc canvas with a soft violet glow, hairline
+borders, a single accent color, Inter/system typography and quiet
+micro-interactions (Linear/Vercel school). Every feature stays
+self-explanatory: talk, type, or click an example; the result card says
+plainly what was heard, understood and replied; the teach panel closes
+the learning loop.
+
+Audio is captured with AudioContext and encoded to 16 kHz mono PCM WAV
+client-side — the server needs no ffmpeg. (The ScriptProcessorNode is
+held in a module variable: browsers garbage-collect it mid-recording
+otherwise, which silently kills the mic.)
 """
 
 PAGE = """<!doctype html>
@@ -14,149 +18,161 @@ PAGE = """<!doctype html>
 <title>Voice AI Assistant</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-:root{--paper:#fdf6e3;--ink:#33322e;--coral:#ff5252;--teal:#00b8a0;
---amber:#ffb300;--violet:#7c4dff;--blue:#2f7bff;--green:#00b85a;
---pink:#ff5c95;--soft:#fffdf7;--dim:#6b675c}
+:root{--bg:#09090b;--card:#101014;--card2:#141419;--line:rgba(255,255,255,.08);
+--line2:rgba(255,255,255,.14);--ink:#fafafa;--dim:#8f8f98;--dim2:#6b6b74;
+--violet:#8b5cf6;--teal:#2dd4bf;--amber:#f59e0b;--rose:#fb7185;
+--emerald:#34d399}
 *{box-sizing:border-box}
-body{margin:0;color:var(--ink);
-background:var(--paper);
-background-image:radial-gradient(rgba(51,50,46,.08) 1.2px,transparent 1.3px);
-background-size:24px 24px;
-font-family:'Segoe Print','Comic Sans MS','Chalkboard SE',cursive;
-display:flex;justify-content:center;min-height:100vh;
--webkit-font-smoothing:antialiased}
-main{width:100%;max-width:620px;padding:26px 18px 46px;display:flex;
-flex-direction:column;gap:16px}
-.sk{background:var(--soft);border:2.5px solid var(--ink);
-border-radius:255px 15px 225px 15px/15px 225px 15px 255px;
-box-shadow:4px 4px 0 rgba(51,50,46,.8)}
+::selection{background:rgba(139,92,246,.35)}
+body{margin:0;color:var(--ink);background:var(--bg);
+background-image:radial-gradient(640px 320px at 50% -60px,
+rgba(139,92,246,.16),transparent 70%);
+font:15px/1.6 Inter,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+-webkit-font-smoothing:antialiased;
+display:flex;justify-content:center;min-height:100vh}
+main{width:100%;max-width:640px;padding:28px 20px 48px;display:flex;
+flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);
+border-radius:16px}
+
 header{display:flex;justify-content:space-between;align-items:center;
-gap:10px;padding:14px 20px;transform:rotate(-.6deg)}
-header h1{font-size:21px;margin:0;font-weight:700}
-header .badge{font-size:11px;background:var(--amber);border:2px solid var(--ink);
-border-radius:12px 4px 10px 5px;padding:3px 9px;box-shadow:2px 2px 0 var(--ink);
-font-weight:700}
+padding:14px 18px}
+header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.01em;
+display:flex;align-items:center;gap:9px}
+header h1::before{content:"";width:8px;height:8px;border-radius:3px;
+background:linear-gradient(135deg,var(--violet),#6366f1)}
+#engine{font:11px/1 ui-monospace,Consolas,monospace;color:var(--dim);
+border:1px solid var(--line);border-radius:999px;padding:5px 11px;
+background:var(--card2)}
 
 .steps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-@media(max-width:520px){.steps{grid-template-columns:1fr}}
-.step{padding:10px 12px;font-size:12.5px;line-height:1.5;transition:all .18s ease}
-.step:hover{transform:translateY(-2px) rotate(0deg)!important}
-.step b{display:block;font-size:13.5px}
-.s1{transform:rotate(-1deg);background:#ccf3ec;border-color:#00806e}
-.s1 b{color:#00795f}
-.s2{transform:rotate(.8deg);background:#e9dcff;border-color:#6a3fd8}
-.s2 b{color:#5b2fd4}
-.s3{transform:rotate(-.5deg);background:#ffedb0;border-color:#d19400}
-.s3 b{color:#9a6b00}
+@media(max-width:560px){.steps{grid-template-columns:1fr}}
+.step{padding:12px 14px}
+.step b{display:flex;align-items:center;gap:7px;font-size:12px;
+font-weight:600;letter-spacing:.02em;margin-bottom:3px}
+.step b::before{content:"";width:6px;height:6px;border-radius:50%;
+background:var(--dot)}
+.step span{font-size:12.5px;color:var(--dim)}
+.s1{--dot:var(--teal)}.s2{--dot:var(--violet)}.s3{--dot:var(--amber)}
 
-.micwrap{text-align:center;padding:20px 0 4px}
-#rec{width:150px;height:150px;border-radius:50% 46% 52% 48%/47% 52% 46% 53%;
-border:3px solid var(--ink);cursor:pointer;font-family:inherit;
-background:var(--coral);color:#fff;font-weight:700;font-size:17px;
-box-shadow:5px 6px 0 rgba(51,50,46,.55),0 10px 22px rgba(255,82,82,.35);
-transition:transform .16s ease,box-shadow .16s ease}
-#rec:hover{transform:scale(1.05) rotate(-1.5deg);
-box-shadow:6px 8px 0 rgba(51,50,46,.5),0 14px 28px rgba(255,82,82,.45)}
-#rec.on{background:var(--pink);color:#fff;animation:wiggle .5s infinite}
-@keyframes wiggle{0%,100%{transform:rotate(-1.6deg) scale(1.03)}
-50%{transform:rotate(1.6deg) scale(1.03)}}
-#hint{color:var(--dim);font-size:13px;margin-top:12px}
-#hint kbd{background:#fff;border:2px solid var(--ink);border-radius:8px 3px 9px 4px;
-padding:1px 7px;font-size:11px;box-shadow:2px 2px 0 rgba(51,50,46,.6)}
-#status{min-height:22px;font-size:14px;text-align:center;color:var(--dim)}
-#status.err{color:var(--coral);font-weight:700}
+.micwrap{text-align:center;padding:26px 0 6px}
+#rec{width:132px;height:132px;border-radius:50%;border:0;cursor:pointer;
+font-family:inherit;color:#fff;font-weight:600;font-size:14.5px;
+letter-spacing:.02em;
+background:linear-gradient(135deg,#8b5cf6,#6366f1);
+box-shadow:inset 0 1px 0 rgba(255,255,255,.18),
+0 20px 50px -16px rgba(139,92,246,.55);
+transition:transform .18s ease,box-shadow .18s ease}
+#rec:hover{transform:scale(1.03)}
+#rec:active{transform:scale(.98)}
+#rec.on{background:linear-gradient(135deg,#fb7185,#f43f5e);
+animation:ring 1.5s ease-out infinite}
+@keyframes ring{0%{box-shadow:inset 0 1px 0 rgba(255,255,255,.2),
+0 0 0 0 rgba(244,63,94,.45)}100%{box-shadow:inset 0 1px 0
+rgba(255,255,255,.2),0 0 0 22px rgba(244,63,94,0)}}
+#hint{color:var(--dim2);font-size:12.5px;margin-top:14px}
+#hint kbd{font:11px ui-monospace,Consolas,monospace;color:var(--dim);
+background:var(--card2);border:1px solid var(--line2);border-radius:6px;
+padding:2px 7px}
+#status{min-height:20px;font-size:13px;text-align:center;color:var(--dim)}
+#status.err{color:var(--rose)}
 
-h2{font-size:14px;margin:0 0 8px;transform:rotate(-.8deg)}
-h2 .tag{display:inline-block;background:var(--teal);color:#fff;
-border:2px solid var(--ink);border-radius:10px 4px 12px 5px;padding:2px 10px;
-box-shadow:3px 3px 0 rgba(51,50,46,.6);font-weight:700}
+.label{font-size:10.5px;font-weight:600;letter-spacing:.14em;
+text-transform:uppercase;color:var(--dim2);margin:0 0 9px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{border:2px solid var(--ink);border-radius:14px 5px 12px 6px;
-padding:5px 11px;font-size:12.5px;cursor:pointer;font-family:inherit;
-box-shadow:3px 3px 0 rgba(51,50,46,.5);font-weight:700;color:#33322e;
-transition:all .15s ease}
-.chip:hover{transform:translate(-1px,-2px) rotate(-.8deg);
-box-shadow:4px 6px 0 rgba(51,50,46,.4)}
-.c1{background:#ffd0d0}.c2{background:#b8f0e6}.c3{background:#ffe089}
-.c4{background:#e4ccff}.c5{background:#c7ddff}.c6{background:#b2f0cf}
+.chip{display:inline-flex;align-items:center;gap:8px;
+border:1px solid var(--line);border-radius:999px;padding:7px 14px;
+font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;
+background:var(--card);transition:border-color .15s ease,transform .15s ease}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;
+background:var(--dot)}
+.chip:hover{border-color:rgba(139,92,246,.5);transform:translateY(-1px)}
+.c1{--dot:var(--rose)}.c2{--dot:var(--teal)}.c3{--dot:var(--amber)}
+.c4{--dot:var(--violet)}.c5{--dot:#60a5fa}.c6{--dot:var(--emerald)}
 
-.typerow{display:flex;gap:8px;padding:12px}
-#typetext{flex:1;font-family:inherit;font-size:15px;color:var(--ink);
-background:#fff;border:2px solid var(--ink);
-border-radius:12px 5px 14px 6px;padding:10px 12px;outline:none;
+.typerow{display:flex;gap:10px;padding:14px}
+#typetext{flex:1;font-family:inherit;font-size:14px;color:var(--ink);
+background:var(--bg);border:1px solid var(--line2);
+border-radius:11px;padding:11px 14px;outline:none;
 transition:border-color .15s ease,box-shadow .15s ease}
-#typetext:focus{border-color:var(--violet);
-box-shadow:0 0 0 3px rgba(124,77,255,.18)}
-#typego{font-family:inherit;font-weight:700;font-size:14px;color:#fff;
-background:var(--violet);border:2px solid var(--ink);
-border-radius:14px 6px 12px 5px;padding:10px 18px;cursor:pointer;
-box-shadow:3px 3px 0 rgba(51,50,46,.55);transition:all .15s ease}
-#typego:hover{transform:translateY(-1px)}
-#typego:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(51,50,46,.5)}
+#typetext::placeholder{color:var(--dim2)}
+#typetext:focus{border-color:rgba(139,92,246,.65);
+box-shadow:0 0 0 3px rgba(139,92,246,.15)}
+#typego{font-family:inherit;font-weight:600;font-size:13px;color:#fff;
+background:linear-gradient(135deg,#8b5cf6,#6366f1);border:0;
+border-radius:11px;padding:11px 20px;cursor:pointer;
+box-shadow:0 8px 24px -10px rgba(139,92,246,.6);
+transition:filter .15s ease,transform .15s ease}
+#typego:hover{filter:brightness(1.1)}
+#typego:active{transform:translateY(1px)}
 
-.result{padding:16px 18px;display:none;transform:rotate(.4deg);
-background:#fff}
-.result .row{margin:9px 0}
-.result .who{font-size:11px;letter-spacing:.5px;font-weight:700;
-text-transform:uppercase;border-radius:8px 3px 9px 4px;display:inline-block;
-padding:1px 8px;border:2px solid var(--ink);margin-bottom:3px;
-box-shadow:2px 2px 0 rgba(51,50,46,.5)}
-.w-said{background:#ffd0d0}.w-knew{background:#e4ccff}
-.w-reply{background:#b8f0e6}.w-fix{background:#ffe089}
-.result .heard{font-size:17px}
-.result .fixed{font-size:16px;color:#00875a;font-weight:700}
-.result .reply{font-size:17px}
-.result .meta{font-size:12px;color:var(--dim);margin-top:10px}
-#play{font-family:inherit;font-weight:700;
-background:#b8f0e6;border:2px solid var(--ink);
-border-radius:10px 4px 12px 5px;padding:6px 13px;font-size:13px;cursor:pointer;
-box-shadow:3px 3px 0 rgba(51,50,46,.5);margin-top:8px;transition:all .15s ease}
-#play:hover{transform:translateY(-1px)}
-#play:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(51,50,46,.4)}
+.result{padding:20px;display:none}
+.result .row{margin:13px 0}
+.result .row:first-child{margin-top:0}
+.result .who{font-size:10.5px;font-weight:600;letter-spacing:.14em;
+text-transform:uppercase;color:var(--dim2);display:block;margin-bottom:4px}
+.result .heard{font-size:16px}
+.result .fixed{font-size:14px;color:var(--emerald);font-weight:500}
+.result #intent{font-size:14px;color:var(--dim)}
+.result .reply{font-size:16px;font-weight:500}
+.result .meta{font-size:11.5px;color:var(--dim2);margin-top:14px}
+#note{display:none;color:var(--amber);font-size:12.5px;margin-top:12px;
+padding:10px 13px;border:1px solid rgba(245,158,11,.25);
+background:rgba(245,158,11,.07);border-radius:10px}
+#play{font-family:inherit;font-size:12.5px;font-weight:500;color:var(--ink);
+background:var(--card2);border:1px solid var(--line2);border-radius:9px;
+padding:7px 14px;cursor:pointer;margin-top:12px;
+transition:border-color .15s ease}
+#play:hover{border-color:rgba(139,92,246,.5)}
 
-.teach{padding:14px 16px;display:none;flex-direction:column;gap:9px;
-transform:rotate(-.5deg);background:#ffecad}
-.teachrow{display:flex;gap:8px}
-#fbtext{flex:1;font-family:inherit;font-size:15px;color:var(--ink);
-background:#fff;border:2px solid var(--ink);
-border-radius:12px 5px 14px 6px;padding:10px 12px;outline:none;
+.teach{padding:18px 20px;display:none;flex-direction:column;gap:10px}
+.teach .t{font-size:13px;font-weight:600}
+.teach .t span{color:var(--dim);font-weight:400}
+.teachrow{display:flex;gap:10px}
+#fbtext{flex:1;font-family:inherit;font-size:14px;color:var(--ink);
+background:var(--bg);border:1px solid var(--line2);
+border-radius:11px;padding:11px 14px;outline:none;
 transition:border-color .15s ease,box-shadow .15s ease}
-#fbtext:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(255,179,0,.2)}
-#send{font-family:inherit;font-weight:700;font-size:14px;color:#3d2e00;
-background:var(--amber);border:2px solid var(--ink);
-border-radius:14px 6px 12px 5px;padding:10px 16px;cursor:pointer;
-box-shadow:3px 3px 0 rgba(51,50,46,.55);transition:all .15s ease}
-#send:hover{transform:translateY(-1px)}
-#send:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(51,50,46,.4)}
-#fbres{font-size:13px;color:var(--dim);min-height:18px}
+#fbtext::placeholder{color:var(--dim2)}
+#fbtext:focus{border-color:rgba(139,92,246,.65);
+box-shadow:0 0 0 3px rgba(139,92,246,.15)}
+#send{font-family:inherit;font-weight:600;font-size:13px;color:#fff;
+background:linear-gradient(135deg,#8b5cf6,#6366f1);border:0;
+border-radius:11px;padding:11px 20px;cursor:pointer;
+box-shadow:0 8px 24px -10px rgba(139,92,246,.6);
+transition:filter .15s ease,transform .15s ease}
+#send:hover{filter:brightness(1.1)}
+#send:active{transform:translateY(1px)}
+#send:disabled{opacity:.5}
+#fbres{font-size:12.5px;color:var(--dim);min-height:18px}
 
-footer{margin-top:6px;text-align:center;color:var(--dim);font-size:12.5px;
-transform:rotate(.4deg)}
+footer{margin-top:4px;text-align:center;color:var(--dim2);font-size:11.5px;
+font-variant-numeric:tabular-nums}
 </style></head><body>
 <main>
-  <header class="sk">
-    <h1>🎙️ Voice AI Assistant</h1>
-    <span class="badge" id="engine">…</span>
+  <header class="card">
+    <h1>Voice AI Assistant</h1>
+    <span id="engine">…</span>
   </header>
 
   <div class="steps">
-    <div class="sk step s1"><b>1 · 🎙️ Talk</b>
-      click the mic, speak, click again</div>
-    <div class="sk step s2"><b>2 · 🧠 Understand</b>
-      it hears you, then fixes its known mistakes</div>
-    <div class="sk step s3"><b>3 · ✏️ Teach</b>
-      wrong word? correct it once — it learns</div>
+    <div class="card step s1"><b>1 · Talk</b>
+      <span>tap the mic, speak, tap again — or type below</span></div>
+    <div class="card step s2"><b>2 · Understand</b>
+      <span>it detects the language and fixes its known mistakes</span></div>
+    <div class="card step s3"><b>3 · Teach</b>
+      <span>correct it once and it never repeats the mistake</span></div>
   </div>
 
   <div class="micwrap">
-    <button id="rec" aria-label="start recording">🎙️ TAP TO<br>TALK</button>
+    <button id="rec" aria-label="start recording">TAP TO TALK</button>
     <div id="hint">press <kbd>space</kbd> to start — press again to stop
       · no mic? type below</div>
   </div>
   <div id="status"></div>
 
   <section>
-    <h2><span class="tag">TRY SAYING — click one</span></h2>
+    <p class="label">Try saying — click one</p>
     <div class="chips">
       <button class="chip c1">what time is it</button>
       <button class="chip c2">what is twelve plus thirty</button>
@@ -168,35 +184,34 @@ transform:rotate(.4deg)}
     </div>
   </section>
 
-  <section class="sk">
+  <section class="card">
     <div class="typerow">
-      <input id="typetext" placeholder="no mic? type a command here…">
+      <input id="typetext" placeholder="Type a command — e.g. what time is it">
       <button id="typego">Go →</button>
     </div>
   </section>
 
-  <div class="result sk" id="result">
-    <div class="row"><span class="who w-said">🗣️ you said</span>
+  <div class="result card" id="result">
+    <div class="row"><span class="who">You said</span>
       <div class="heard" id="heard"></div></div>
     <div class="row" id="fixedrow" style="display:none">
-      <span class="who w-fix">✨ learned fix</span>
+      <span class="who">✨ Learned fix</span>
       <div class="fixed" id="fixed"></div></div>
-    <div class="row"><span class="who w-knew">🧠 understood as</span>
+    <div class="row"><span class="who">Understood as</span>
       <div id="intent"></div></div>
-    <div class="row"><span class="who w-reply">💬 it replied</span>
+    <div class="row"><span class="who">It replied</span>
       <div class="reply" id="reply"></div>
-      <button id="play" style="display:none">▶ hear it</button></div>
+      <button id="play" style="display:none">▶ Hear it</button></div>
     <div class="meta" id="rmeta"></div>
-    <div id="note" style="display:none;color:#9a6b00;font-size:12.5px;
-      margin-top:8px"></div>
+    <div id="note"></div>
   </div>
 
-  <div class="teach sk" id="teach">
-    <div><b>✏️ Misheard?</b> Type what you actually said — it learns and
-      won't repeat the mistake:</div>
+  <div class="teach card" id="teach">
+    <div class="t">Misheard? <span>Type what you actually said — it learns
+      and won't repeat the mistake.</span></div>
     <div class="teachrow">
       <input id="fbtext" placeholder="what you really said…">
-      <button id="send">teach</button>
+      <button id="send">Teach</button>
     </div>
     <div id="fbres"></div>
   </div>
@@ -260,17 +275,17 @@ async function toggle(){
     };
     src.connect(processor);processor.connect(ctx.destination);
     recState="recording";
-    $("rec").classList.add("on");$("rec").innerHTML="● LISTENING…<br>tap to stop";
-    $("hint").textContent="speak now — click the button when done";
+    $("rec").classList.add("on");$("rec").textContent="● LISTENING — TAP TO STOP";
+    $("hint").textContent="speak now — tap the button when done";
     $("status").className="";$("status").textContent="";
     const t0=Date.now();tick=setInterval(()=>{
-      $("status").textContent="🎙️ recording… "+((Date.now()-t0)/1000).toFixed(1)+" s";
+      $("status").textContent="recording… "+((Date.now()-t0)/1000).toFixed(1)+" s";
     },100);
   }catch(e){err("mic blocked: "+e.message+" — you can type instead ↓")}
 }
 async function stop(){
   recState="idle";clearInterval(tick);
-  $("rec").classList.remove("on");$("rec").innerHTML="🎙️ TAP TO<br>TALK";
+  $("rec").classList.remove("on");$("rec").textContent="TAP TO TALK";
   $("hint").innerHTML='press <kbd>space</kbd> to start — press again to stop · no mic? type below';
   $("status").textContent="thinking…";
   try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}
@@ -350,6 +365,7 @@ function show(j){
   if(teach&&j.id&&!j.__taught){j.__taught=true;
     $("fbtext").value=teach;$("send").click();}
 }
+$("play").onclick=()=>{if(audio)audio.play().catch(()=>{})};
 const demo=DEMO.get("demo");       // capture hook: auto-run a command
 if(demo){
   // hidden <img> to /slow keeps the window load event pending until the
@@ -360,7 +376,6 @@ if(demo){
   document.body.appendChild(hold);
   $("typetext").value=demo;sendText();
 }
-$("play").onclick=()=>{if(audio)audio.play().catch(()=>{})};
 
 // ---- teach ---------------------------------------------------------- //
 $("send").onclick=async()=>{
