@@ -207,6 +207,7 @@ transform:rotate(.4deg)}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",
 ">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const DEMO=new URLSearchParams(location.search); // ?demo=&teach= for captures
 let last=null, recState="idle", stream=null, ctx=null, processor=null,
     chunks=[], tick=null, audio=null;
 
@@ -314,7 +315,8 @@ async function sendText(){
   try{
     const r=await fetch("/text",{method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({text,session:"web"})});
+      body:JSON.stringify({text,session:"web",
+                           audio:DEMO.get("audio","1")})});
     show(await r.json());
   }catch(e){err("server unreachable")}
 }
@@ -344,6 +346,19 @@ function show(j){
     audio.play().catch(()=>{});
     $("play").style.display="inline-block";
   }
+  const teach=DEMO.get("teach");   // capture hook: auto-submit a correction
+  if(teach&&j.id&&!j.__taught){j.__taught=true;
+    $("fbtext").value=teach;$("send").click();}
+}
+const demo=DEMO.get("demo");       // capture hook: auto-run a command
+if(demo){
+  // hidden <img> to /slow keeps the window load event pending until the
+  // whole demo (incl. the teach round-trip) has settled — headless
+  // captures shoot at load time (fetch() would NOT delay it)
+  const hold=document.createElement("img");
+  hold.src="/slow?ms=9000";hold.style.display="none";
+  document.body.appendChild(hold);
+  $("typetext").value=demo;sendText();
 }
 $("play").onclick=()=>{if(audio)audio.play().catch(()=>{})};
 

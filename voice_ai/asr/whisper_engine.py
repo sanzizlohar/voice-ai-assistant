@@ -38,15 +38,6 @@ SCRIPT_PROMPTS = {
 }
 
 
-def _script_ratio(text: str, lo: int, hi: int) -> float:
-    """Share of alphabetic chars inside a unicode block (Bengali 0980-09FF,
-    Devanagari 0900-097F)."""
-    alpha = [c for c in text if c.isalpha()]
-    if not alpha:
-        return 0.0
-    return sum(1 for c in alpha if lo <= ord(c) <= hi) / len(alpha)
-
-
 class WhisperAsr(AsrEngine):
     def __init__(self, model: str | None = None, beam_size: int | None = None,
                  cpu_threads: int = 0):
@@ -136,13 +127,12 @@ class WhisperAsr(AsrEngine):
                 if candidate in SUPPORTED:
                     text, language, conf = self._decode(audio, candidate)
 
-        if language == "bn" and text:
-            from ..text.normalize import strip_accents
-            ratio = _script_ratio(text, 0x0980, 0x09FF)
-            if ratio < 0.3:
-                note = ("Bengali speech needs a stronger CPU/model here "
-                        "(VIA_WHISPER_MODEL=small) — type mode works fully "
-                        "for বাংলা")
+        if language == "bn" and self.model_size in ("base", "tiny", "en"):
+            # base/tiny genuinely cannot decode Bengali (garbage or another
+            # script) and small needs minutes on CPU-class hardware
+            note = ("Bengali voice recognition needs a stronger CPU or "
+                    "VIA_WHISPER_MODEL=small — Bengali works fully via "
+                    "typing below; বাংলা replies speak natively")
 
         from ..text.normalize import tokenize
         tokens = tokenize(text, (language or "en").split("-")[0])

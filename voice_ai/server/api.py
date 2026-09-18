@@ -127,6 +127,14 @@ def make_handler(api: Api):
             api.assistant.metrics.inc("http.requests")
             if path == "/" or path == "/index.html":
                 self._send(200, PAGE.encode(), "text/html; charset=utf-8")
+            elif path == "/slow":
+                # test/capture helper: hold the request open so tools that
+                # screenshot at page-load time can wait for async flows
+                q = dict(p.split("=", 1) for p in self.path.split("?")[1:]
+                         if "=" in p)
+                ms = min(int(q.get("ms", "1000") or 1000), 15000)
+                time.sleep(ms / 1000.0)
+                self._json(200, {"ok": True, "slept_ms": ms})
             elif path == "/healthz":
                 if api.saturated:
                     self._json(503, {"ok": False, "reason": "saturated"})

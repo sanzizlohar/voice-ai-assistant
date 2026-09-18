@@ -387,7 +387,8 @@ class Assistant:
         c = m["counters"]
         return {
             "uptime_s": round(time.time() - self.t0, 1),
-            "utterances": int(c.get("utterances.processed", 0)),
+            "utterances": (int(c.get("utterances.processed", 0))
+                           + int(c.get("text.utterances", 0))),
             "no_speech": int(c.get("utterances.no_speech", 0)),
             "feedback": int(c.get("feedback.count", 0)),
             "tts_cache_hits": int(c.get("tts.cache_hits", 0)),
