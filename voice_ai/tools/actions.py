@@ -30,7 +30,7 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) via-assistant/1.0")
 
 BASE_TOOLS = {"web_search", "read_page", "open_url", "open_app", "open_path",
               "sys_info", "list_dir", "search_files", "read_file",
-              "clipboard_write"}
+              "clipboard_write", "get_time", "take_note", "set_timer"}
 CONSENT_TOOLS = {"run_command", "linkedin_share"}
 
 APP_ALIASES = {
@@ -147,9 +147,10 @@ class ActionCenter:
     """Executes allowlisted tools; consent-gates powerful ones; audits all."""
 
     def __init__(self, events=None, launcher=None, allow_shell: bool | None
-                 = None):
+                 = None, note_sink=None):
         self.events = events
         self._launch = launcher or self._default_launch
+        self.note_sink = note_sink
         self.allow_shell = (os.environ.get("VIA_SHELL", "") == "1"
                             if allow_shell is None else allow_shell)
         self._pending: dict = {}      # consent_id -> {tool, args, ts}
@@ -256,6 +257,34 @@ class ActionCenter:
                     subprocess.run(cmd, input=text.encode(),
                                    check=False, timeout=10)
                     return
+
+    # ---------------------------------------------------------------- #
+    # everyday assistant tools (usable by the LLM agent)
+    # ---------------------------------------------------------------- #
+    def _tool_get_time(self) -> dict:
+        import datetime
+        now = datetime.datetime.now()
+        return {"time": now.strftime("%H:%M"),
+                "date": now.strftime("%Y-%m-%d"),
+                "weekday": now.strftime("%A")}
+
+    def _tool_take_note(self, text: str = "") -> dict:
+        text = (text or "").strip()
+        if not text:
+            return {"error": "note text required"}
+        if self.note_sink:
+            self.note_sink(text)
+        return {"noted": text}
+
+    def _tool_set_timer(self, n: int = 0, unit: str = "minutes") -> dict:
+        n = int(n or 0)
+        if n <= 0:
+            return {"error": "n must be positive"}
+        unit = unit if unit in ("seconds", "minutes") else "minutes"
+        seconds = n * (60 if unit == "minutes" else 1)
+        return {"set": f"{n} {unit}", "seconds": seconds,
+                "note": "timer acknowledged — UI confirmation only in "
+                        "this version"}
 
     # ---------------------------------------------------------------- #
     # web tools (stdlib only)

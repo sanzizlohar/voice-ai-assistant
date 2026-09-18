@@ -68,23 +68,65 @@ def detect_language(tokens: list[str], lang_hint: str | None = None) -> str:
 
 
 def get_engine(name: str = "auto", **kwargs) -> AsrEngine:
-    """Factory. ``auto`` prefers a real Whisper install, else offline."""
+    """Factory. ``auto`` prefers, in order:
+    1. a cloud Whisper endpoint (auto-configured from the brain's
+       Groq/OpenAI settings — best Bengali/Hindi accuracy, ~1 s)
+    2. a local Whisper install
+    3. the offline tone-codec engine."""
     name = (name or "auto").lower()
+    local = None
+    if name in ("auto", "whisper") and _whisper_available():
+        from .whisper_engine import WhisperAsr
+        local = WhisperAsr(**kwargs)
     if name in ("auto", "whisper"):
-        if _whisper_available():
-            from .whisper_engine import WhisperAsr
-            return WhisperAsr(**kwargs)
+        cloud = _cloud_asr_engine()
+        if cloud is not None:
+            return cloud[0]   # carries the local model as its fallback
+        if local is not None:
+            return local
         if name == "whisper":
             raise ImportError(
                 "no Whisper backend found — install one with:\n"
                 "  pip install faster-whisper   (recommended)\n"
                 "  pip install openai-whisper   (classic)")
-        from .offline import OfflineCodecAsr
-        return OfflineCodecAsr(**kwargs)
     if name == "offline":
         from .offline import OfflineCodecAsr
         return OfflineCodecAsr(**kwargs)
-    raise ValueError(f"unknown ASR engine '{name}' (auto/offline/whisper)")
+    if name == "offline" or local is None:
+        from .offline import OfflineCodecAsr
+        return OfflineCodecAsr(**kwargs)
+    return local
+
+
+def _cloud_asr_engine() -> tuple | None:
+    """(CloudWhisperAsr, local_engine) discovery from env or brain config."""
+    import os
+    from .cloud_whisper import CloudWhisperAsr
+    base = os.environ.get("VIA_ASR_BASE_URL")
+    key = os.environ.get("VIA_ASR_API_KEY")
+    model = os.environ.get("VIA_ASR_MODEL")
+    local = None
+    if _whisper_available():
+        from .whisper_engine import WhisperAsr
+        local = WhisperAsr()
+    if base or key or model:
+        return (CloudWhisperAsr(base or "https://api.openai.com/v1",
+                                key or "", model or "whisper-1", local),
+                local)
+    from ..llm import config as brain
+    cfg = brain.load_config()
+    if not cfg:
+        return None
+    provider = cfg.get("provider")
+    api_key = cfg.get("api_key", "")
+    if provider == "groq" and api_key:
+        return (CloudWhisperAsr(cfg["base_url"], api_key,
+                                "whisper-large-v3", local), local)
+    if provider == "openai" and api_key:
+        return (CloudWhisperAsr(cfg["base_url"], api_key,
+                                "whisper-1", local), local)
+    return None
+
 
 
 def _whisper_available() -> bool:

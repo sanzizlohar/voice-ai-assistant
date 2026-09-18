@@ -31,7 +31,7 @@ class TestLanguageLocking(unittest.TestCase):
         English decoding — Bengali speech came back as English words."""
         spy = _SpyEngine()
         a = Assistant(asr_engine=spy, tts_engine=OfflineTts(),
-                      store=Store(":memory:"))
+                      llm_engine=False, store=Store(":memory:"))
         pcm, _ = Synthesizer(Channel(error_rate=0.0)).utterance(
             "en", "hello there")
         r = a.process(pcm, 16000, session_id="langtest")
@@ -48,7 +48,7 @@ class TestPipeline(unittest.TestCase):
         # hermetic: tests always run on the offline doubles, even when
         # real Whisper/SAPI engines are installed
         self.a = Assistant(asr_engine=OfflineCodecAsr(),
-                           tts_engine=OfflineTts(),
+                           tts_engine=OfflineTts(), llm_engine=False,
                            store=Store(":memory:"))
         self.a.warmup()
         self.syn = Synthesizer(Channel(error_rate=0.0, snr_db=26.0, seed=5))
@@ -129,6 +129,7 @@ class TestPipeline(unittest.TestCase):
         self.assertGreater(len(self.a.confusion.rules()), 0)
 
         a2 = Assistant(asr_engine=OfflineCodecAsr(), tts_engine=OfflineTts(),
+                       llm_engine=False,
                        store=self.a.store)  # new brain, same sqlite
         a2.warmup()
         pcm, meta = syn.utterance("en", "note buy coffee beans")

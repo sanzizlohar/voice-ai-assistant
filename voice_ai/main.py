@@ -76,7 +76,7 @@ def cmd_demo(args) -> int:
     # the demo speaks the tone-encoded corpus: keep both engines offline
     # (real Whisper would hear beeps, SAPI is wasted on them)
     a = Assistant(asr_engine=OfflineCodecAsr(), tts_engine=OfflineTts(),
-                  store=Store(args.db))
+                  llm_engine=False, store=Store(args.db))
     warm = a.warmup()
     if warm["total_s"] > 0.05:
         print(f" engines warmed in {warm['total_s']}s "
@@ -222,7 +222,7 @@ def cmd_synth(args) -> int:
 def cmd_bench(args) -> int:
     _enable_ansi()
     a = Assistant(asr_engine=OfflineCodecAsr(), tts_engine=OfflineTts(),
-                  store=Store(args.db))
+                  llm_engine=False, store=Store(args.db))
     channel = Channel(error_rate=args.noise, snr_db=24.0, seed=args.seed)
     syn = Synthesizer(channel)
     phrases = _phrase_list(",".join(LANGUAGES), 10 ** 6)  # full corpus
@@ -351,7 +351,8 @@ def cmd_selftest(args) -> int:
     from .asr.offline import OfflineCodecAsr
     from .tts.offline import OfflineTts
     a = Assistant(asr_engine=OfflineCodecAsr(), tts_engine=OfflineTts(),
-                  store=Store(":memory:"), want_tts=True)
+                  llm_engine=False, store=Store(":memory:"),
+                  want_tts=True)
     a.warmup()
     syn = Synthesizer(Channel(error_rate=0.0, snr_db=26.0, seed=3))
 

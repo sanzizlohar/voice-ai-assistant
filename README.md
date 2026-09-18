@@ -4,7 +4,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-109_passing-brightgreen.svg)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-118_passing-brightgreen.svg)](#-testing)
 [![Latency](https://img.shields.io/badge/p50_latency-47ms-informational.svg)](#-performance)
 [![No External Dependencies](https://img.shields.io/badge/deps-zero-9cf.svg)](#-tech-stack--design-decisions)
 
@@ -182,7 +182,7 @@ voice-ai-assistant/
 │   ├── pipeline.py     # Core assistant: stages, budgets, sessions
 │   ├── metrics.py      # Thread-safe counters/gauges/histograms
 │   └── main.py         # CLI: demo, serve, transcribe, synth, bench, selftest
-├── tests/              # 109 unit + end-to-end tests
+├── tests/              # 118 unit + end-to-end tests
 ├── scripts/            # load test · live demo capture · diagram generators
 ├── deploy/             # Dockerfile, docker-compose (+Prometheus), k8s HPA
 └── docs/               # GUIDE.md — plain-English walkthrough
@@ -202,12 +202,15 @@ kubectl apply -f deploy/k8s.yaml   # 3 replicas + HPA
 
 One pod sustains ~19 req/s (~1.7M/day) with p95 under 500ms.
 
-## 🧠 Give It a Brain (LLM)
+## 🧠 Give It a Brain (LLM) — and it becomes a true agent
 
-Connect any OpenAI-compatible model and the assistant answers *general*
-questions — spoken aloud, in your language — and can **search the web**
-and **run PC tasks** mid-answer (tools are injected into the model's
-reasoning loop).
+Connect any OpenAI-compatible model and **everything you say routes
+through the agent**: it answers general questions, searches the web,
+reads pages, opens apps, finds files, takes notes, sets timers —
+chaining tools mid-answer, spoken aloud in your language. If the brain
+is unreachable, the local intent engine silently takes over (and with
+no brain connected, the assistant still handles every built-in command
+offline).
 
 **Option A — dashboard (easiest):** the "LLM brain" panel at the bottom
 of the page → pick a provider → paste the key → Connect. Hot-swaps live.
@@ -236,6 +239,7 @@ The brain (and the keyword fast path, no LLM needed) can act on your PC:
 
 | Tool | What it does |
 |---|---|
+| `get_time` · `take_note` · `set_timer` | the agent's everyday tools — notes are persisted, timers confirmed |
 | `open_app` | launches apps — chrome, notepad, calculator, spotify, vscode… |
 | `open_url` | opens websites |
 | `web_search` / `read_page` | DuckDuckGo search + page text extraction (stdlib) |
@@ -275,12 +279,18 @@ python -m voice_ai.main serve --port 8080
 # header shows: whisper:base · edge — you're live
 ```
 
-Honest notes: Whisper `base` on a 4-core CPU answers in ~2 s (`tiny` is
-faster/rougher; `small` is better for Indic but needs minutes on CPU-class
-hardware — Bengali voice input specifically wants `small` or a stronger
-CPU, while Bengali *typing and spoken replies* work everywhere). The
-learning metrics in `bench` use a deterministic simulated confusion
-channel so numbers reproduce on any machine.
+### Bengali & Hindi voice — the cloud ASR path
+
+Local `base` can't decode Bengali on a CPU, and `small` needs minutes —
+so when your brain is **Groq or OpenAI**, voice transcription
+automatically goes through their **whisper-large-v3** audio API
+(~1 s, excellent বাংলা/हिन्दी), falling back to the local model if the
+network drops. Override with `VIA_ASR_BASE_URL` / `VIA_ASR_API_KEY` /
+`VIA_ASR_MODEL`; the header badge shows `cloud:whisper-large-v3`.
+
+Honest notes: local Whisper `base` answers in ~2 s (`tiny` is faster/
+rougher). The learning metrics in `bench` use a deterministic simulated
+confusion channel so numbers reproduce on any machine.
 
 ## 🧪 Testing
 
@@ -295,7 +305,7 @@ python -m unittest tests.test_nlu.TestIndic.test_hindi_time -v
 python -m voice_ai.main selftest
 ```
 
-**109 tests, 0 failures, no network required.**
+**118 tests, 0 failures, no network required.**
 
 ## 📄 License
 

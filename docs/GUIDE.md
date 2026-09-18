@@ -158,3 +158,14 @@ Safety: the tool list is a strict allowlist; arbitrary shell commands
 stay disabled unless you set `VIA_SHELL=1`; every action is written to
 the auditable event stream. The "open X" fast path ("open chrome") runs
 without any LLM — it's a keyword intent that launches apps directly.
+
+## 7. Agent mode — every word goes to the brain
+
+With a brain connected, the pipeline flips to **agent-first**: your
+voice (transcribed through cloud Whisper for perfect Bengali/Hindi)
+goes straight to the LLM, which may chain tools — get_time, take_note,
+set_timer, web_search, read_page, open_app, search_files, read_file,
+clipboard_write, linkedin_share — before speaking one natural reply.
+The local intent engine stops being the primary brain and becomes the
+**safety net**: if the model or network fails, the offline commands
+still work exactly as before.

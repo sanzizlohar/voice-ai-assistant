@@ -87,8 +87,12 @@ class Assistant:
         self.metrics = metrics or Metrics()
         self.events = events or EventLog()
         self.actions = actions or ActionCenter(events=self.events)
+        self.actions.note_sink = self._persist_agent_note
         self.nlu = IntentEngine(actions=self.actions)
-        self.llm = llm_engine if llm_engine is not None else get_llm()
+        if llm_engine is False:
+            self.llm = None            # explicit hermetic/offline mode
+        else:
+            self.llm = llm_engine if llm_engine is not None else get_llm()
         self.agent = (LlmAgent(self.llm, self.actions)
                       if self.llm is not None else None)
         self.default_language = default_language
@@ -188,7 +192,10 @@ class Assistant:
         fired = fired + hw_fired
         stages["adapt_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-        # 4. intent + reply
+        # 4. reply — agent-first when a brain is connected, local intents
+        # otherwise (and as the fallback when the agent fails)
+        tools: list = []
+        note = hyp.note
         t0 = time.perf_counter()
         intent, slots, reply = self.nlu.handle(
             tokens, sess.language,
@@ -196,10 +203,7 @@ class Assistant:
                 [t for t in tokens if t != UNK], sess.language))
         stages["nlu_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-        # 4b. brain: unhandled utterances go to the LLM (with web/PC tools)
-        tools: list = []
-        note = hyp.note
-        if intent == "fallback":
+        if self.agent is not None:
             question = join_tokens([t for t in hyp.tokens if t != UNK],
                                    sess.language)
             chat = self._maybe_chat(question, sess.language, stages)
@@ -321,9 +325,11 @@ class Assistant:
                 [t for t in tokens if t != UNK], lang))
         stages["nlu_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-        # brain: unhandled text goes to the LLM (with web/PC tools)
+        # agent-first: with a brain connected, every request goes through
+        # the agent (tools included); local intent answer stands only as
+        # the fallback when the agent fails
         tools: list = []
-        if intent == "fallback":
+        if self.agent is not None:
             chat = self._maybe_chat(text, lang, stages)
             if chat:
                 intent, reply = "chat", chat["reply"]
@@ -438,6 +444,20 @@ class Assistant:
                       if engine is not None else None)
         self.events.add("info", "llm", "brain_set",
                         engine.name if engine else "no brain")
+
+    def _persist_agent_note(self, text: str) -> None:
+        """note_sink for the agent's take_note tool."""
+        uid = self._next_id()
+        if self.store:
+            self.store.insert_utterance({
+                "id": uid, "session_id": "agent", "ts": time.time(),
+                "lang": self.default_language, "audio_ms": 0,
+                "hypothesis": text, "final": text, "intent": "note",
+                "reply": "Noted.", "wer": None, "latency_ms": 0,
+                "engine": "agent", "dialect": ""})
+        self.metrics.inc("notes.agent")
+        self.events.add("info", "agent", "note", text[:80],
+                        correlation_id=uid)
 
     # ---------------------------------------------------------------- #
     def _next_id(self) -> str:

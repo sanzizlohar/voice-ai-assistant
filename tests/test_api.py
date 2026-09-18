@@ -22,6 +22,7 @@ class TestApi(unittest.TestCase):
     def setUpClass(cls):
         cls.assistant = Assistant(asr_engine=OfflineCodecAsr(),
                                   tts_engine=OfflineTts(),
+                                  llm_engine=False,
                                   store=Store(":memory:"))
         cls.assistant.warmup()
         cls.server = Server(cls.assistant, port=0, workers=2, queue_size=4)
