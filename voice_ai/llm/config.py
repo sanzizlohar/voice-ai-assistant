@@ -74,16 +74,36 @@ def load_config() -> dict | None:
         return None
 
 
+GARBAGE_MODELS = ("", "undefined", "null", "none")
+
+
+def _provider_for_url(base_url: str, provider: str) -> str:
+    """Trust the URL over the dropdown: a groq URL with a key is groq,
+    even if the browser sent a mismatched provider value."""
+    url = (base_url or "").lower()
+    if "api.groq.com" in url:
+        return "groq"
+    if "api.openai.com" in url:
+        return "openai"
+    if "openrouter.ai" in url:
+        return "openrouter"
+    if "localhost:11434" in url or "127.0.0.1:11434" in url:
+        return "ollama"
+    return provider if provider in PROVIDERS else "custom"
+
+
 def save_config(provider: str, api_key: str = "", model: str = "",
                 base_url: str = "") -> dict:
-    if provider not in PROVIDERS:
-        raise ValueError(f"unknown provider '{provider}'")
+    provider = _provider_for_url(base_url, provider)
     spec = PROVIDERS[provider]
+    model = (model or "").strip()
+    if model.lower() in GARBAGE_MODELS:
+        model = ""                       # never persist browser garbage
     cfg = {
         "provider": provider,
         "base_url": base_url or spec["base_url"],
         "model": model or (spec["models"][0] if spec["models"] else ""),
-        "api_key": api_key or "",
+        "api_key": (api_key or "").strip(),
     }
     if spec["needs_key"] and not cfg["api_key"]:
         raise ValueError(f"{provider} needs an API key")
@@ -100,6 +120,26 @@ def clear_config() -> bool:
         return True
     except OSError:
         return False
+
+
+BAD_MODEL_PARTS = ("prompt-guard", "guard", "whisper", "tts", "orpheus",
+                   "embed", "safeguard", "moderation")
+PREFERRED_PARTS = ("llama-3.3", "llama-3.1", "gpt-oss", "kimi", "qwen",
+                   "deepseek", "70b", "instruct", "gemma")
+
+
+def pick_chat_model(models: list) -> str | None:
+    """Choose a CHAT model from a provider's /models list — never a
+    guard/tts/embed model; prefer well-known chat families."""
+    clean = [m for m in models if m and not any(
+        bad in m.lower() for bad in BAD_MODEL_PARTS)]
+    if not clean:
+        return None
+    for part in PREFERRED_PARTS:
+        for m in clean:
+            if part in m.lower():
+                return m
+    return clean[0]
 
 
 def engine_from_config(cfg: dict):
@@ -138,6 +178,15 @@ def resolve() -> tuple:
             "model": env_model or "gpt-4o-mini"}), "env"
     cfg = load_config()
     if cfg:
+        if str(cfg.get("model", "")).lower() in ("", "undefined", "null",
+                                                "none"):
+            models = probe(engine_from_config(cfg)).get("models") or []
+            picked = pick_chat_model(models)
+            if not picked:
+                return None, "none"
+            cfg["model"] = picked
+            save_config(cfg["provider"], api_key=cfg.get("api_key", ""),
+                        model=picked, base_url=cfg.get("base_url", ""))
         return engine_from_config(cfg), cfg["provider"]
     # local ollama probe (0.6 s — boot stays fast)
     try:

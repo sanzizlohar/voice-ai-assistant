@@ -148,6 +148,21 @@ class TestOpenAiCompat(unittest.TestCase):
             srv.stop()
 
 
+class TestPickChatModel(unittest.TestCase):
+    def test_skips_guard_tts_and_picks_chat(self):
+        from voice_ai.llm.config import pick_chat_model
+        models = ["meta-llama/llama-prompt-guard-2-86m",
+                  "canopylabs/orpheus-v1-english",
+                  "openai/gpt-oss-120b", "allam-2-7b"]
+        self.assertEqual(pick_chat_model(models), "openai/gpt-oss-120b")
+
+    def test_garbage_never_stored(self):
+        from voice_ai.llm.config import pick_chat_model
+        self.assertIsNone(pick_chat_model([]))
+        self.assertEqual(pick_chat_model(["undefined"]), "undefined")
+        # 'undefined' garbage is filtered at save/resolve time instead
+
+
 class TestDiscovery(unittest.TestCase):
     def test_env_config_wins(self):
         old = {k: os.environ.get(k) for k in

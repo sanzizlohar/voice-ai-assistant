@@ -530,7 +530,7 @@ function renderBrain(b){
     Object.entries(b.providers).map(([k,p])=>
       "<option value='"+k+"'"+(cur.provider===k?" selected":"")+">"+
       esc(p.label)+"</option>").join("");
-  if(cur.model)$("bmodel").value=cur.model;
+  if(cur.model&&cur.model!=="undefined")$("bmodel").value=cur.model;
   if(cur.api_key_masked)
     $("bkey").placeholder="API key ("+cur.api_key_masked+") — leave empty to keep";
   onProviderChange();
@@ -545,6 +545,8 @@ function renderBrain(b){
 }
 function onProviderChange(){
   const p=$("bprovider").value||(BRAIN.current||{}).provider||"";
+  if(p!==onProviderChange._p){onProviderChange._p=p;   // provider switch:
+    $("bmodel").value="";}                              // drop stale garbage
   const spec=(BRAIN.providers||{})[p];
   const isOllama=p==="ollama";
   $("bkey").style.display=isOllama?"none":"block";
@@ -555,7 +557,7 @@ function onProviderChange(){
     &&BRAIN.last_probe.models)||[];
   const models=live.length?live:(spec&&spec.models?spec.models:[]);
   $("bmodels").innerHTML=models.map(m=>"<option value='"+esc(m)+"'>").join("");
-  if(models&&!$("bmodel").value)$("bmodel").value=models[0];
+  models=(models||[]).filter(Boolean);  if(models.length&&!$("bmodel").value)$("bmodel").value=models[0];
   if(spec&&spec.base_url&&!$("burl").value.match(/^https?:\\/\\//))
     $("burl").value=spec.base_url||"";
   $("bhint").textContent=spec?("hint: "+spec.hint):"";
@@ -564,7 +566,7 @@ $("bprovider").addEventListener("change",onProviderChange);
 $("bsave").onclick=async()=>{
   const body={provider:$("bprovider").value,
     api_key:$("bkey").value.trim(),
-    model:$("bmodel").value.trim(),
+    model:($("bmodel").value.trim()==="undefined"?"":$("bmodel").value.trim()),
     base_url:$("burl").value.trim()};
   if(!body.provider){$("bstatus").textContent="pick a provider first";return}
   $("bsave").disabled=true;
