@@ -1,11 +1,11 @@
-"""Single-page demo UI — dark modern minimalist theme.
+"""Single-page demo UI — dark modern minimalist with a Siri-style orb.
 
-Design language: deep-zinc canvas with a soft violet glow, hairline
-borders, a single accent color, Inter/system typography and quiet
-micro-interactions (Linear/Vercel school). Every feature stays
-self-explanatory: talk, type, or click an example; the result card says
-plainly what was heard, understood and replied; the teach panel closes
-the learning loop.
+Design language: deep-zinc canvas with ambient color glows, hairline
+cards, and the centerpiece — a mic button wrapped in a rotating
+multicolor conic-gradient ring (sky → indigo → fuchsia → orange) that
+brightens, speeds up and PULSES WITH YOUR VOICE LEVEL while listening,
+like Siri on iPhone. Colorful, but composed: one dark canvas, color
+comes from the orb, chips and gradients.
 
 Audio is captured with AudioContext and encoded to 16 kHz mono PCM WAV
 client-side — the server needs no ffmpeg. (The ScriptProcessorNode is
@@ -21,12 +21,15 @@ PAGE = """<!doctype html>
 :root{--bg:#09090b;--card:#101014;--card2:#141419;--line:rgba(255,255,255,.08);
 --line2:rgba(255,255,255,.14);--ink:#fafafa;--dim:#8f8f98;--dim2:#6b6b74;
 --violet:#8b5cf6;--teal:#2dd4bf;--amber:#f59e0b;--rose:#fb7185;
---emerald:#34d399}
+--emerald:#34d399;--sky:#38bdf8;--indigo:#818cf8;--fuchsia:#e879f9;
+--orange:#fb923c}
 *{box-sizing:border-box}
 ::selection{background:rgba(139,92,246,.35)}
 body{margin:0;color:var(--ink);background:var(--bg);
-background-image:radial-gradient(640px 320px at 50% -60px,
-rgba(139,92,246,.16),transparent 70%);
+background-image:
+ radial-gradient(680px 340px at 50% -60px,rgba(139,92,246,.20),transparent 70%),
+ radial-gradient(520px 300px at 92% 108%,rgba(232,121,249,.10),transparent 70%),
+ radial-gradient(420px 260px at 4% 96%,rgba(56,189,248,.08),transparent 70%);
 font:15px/1.6 Inter,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
 -webkit-font-smoothing:antialiased;
 display:flex;justify-content:center;min-height:100vh}
@@ -39,8 +42,10 @@ header{display:flex;justify-content:space-between;align-items:center;
 padding:14px 18px}
 header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.01em;
 display:flex;align-items:center;gap:9px}
-header h1::before{content:"";width:8px;height:8px;border-radius:3px;
-background:linear-gradient(135deg,var(--violet),#6366f1)}
+header h1::before{content:"";width:9px;height:9px;border-radius:50%;
+background:conic-gradient(from 20deg,var(--sky),var(--indigo),
+var(--fuchsia),var(--orange),var(--sky));
+box-shadow:0 0 10px rgba(139,92,246,.55)}
 #engine{font:11px/1 ui-monospace,Consolas,monospace;color:var(--dim);
 border:1px solid var(--line);border-radius:999px;padding:5px 11px;
 background:var(--card2)}
@@ -48,6 +53,9 @@ background:var(--card2)}
 .steps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 @media(max-width:560px){.steps{grid-template-columns:1fr}}
 .step{padding:12px 14px}
+.s1{border-color:rgba(45,212,191,.22)}
+.s2{border-color:rgba(139,92,246,.25)}
+.s3{border-color:rgba(245,158,11,.22)}
 .step b{display:flex;align-items:center;gap:7px;font-size:12px;
 font-weight:600;letter-spacing:.02em;margin-bottom:3px}
 .step b::before{content:"";width:6px;height:6px;border-radius:50%;
@@ -55,21 +63,34 @@ background:var(--dot)}
 .step span{font-size:12.5px;color:var(--dim)}
 .s1{--dot:var(--teal)}.s2{--dot:var(--violet)}.s3{--dot:var(--amber)}
 
-.micwrap{text-align:center;padding:26px 0 6px}
-#rec{width:132px;height:132px;border-radius:50%;border:0;cursor:pointer;
-font-family:inherit;color:#fff;font-weight:600;font-size:14.5px;
-letter-spacing:.02em;
-background:linear-gradient(135deg,#8b5cf6,#6366f1);
-box-shadow:inset 0 1px 0 rgba(255,255,255,.18),
-0 20px 50px -16px rgba(139,92,246,.55);
-transition:transform .18s ease,box-shadow .18s ease}
-#rec:hover{transform:scale(1.03)}
-#rec:active{transform:scale(.98)}
-#rec.on{background:linear-gradient(135deg,#fb7185,#f43f5e);
-animation:ring 1.5s ease-out infinite}
-@keyframes ring{0%{box-shadow:inset 0 1px 0 rgba(255,255,255,.2),
-0 0 0 0 rgba(244,63,94,.45)}100%{box-shadow:inset 0 1px 0
-rgba(255,255,255,.2),0 0 0 22px rgba(244,63,94,0)}}
+.micwrap{text-align:center;padding:24px 0 6px}
+.orb{position:relative;width:158px;height:158px;margin:0 auto;
+transform:scale(calc(1 + var(--lvl,0)*.06));
+transition:transform .09s linear}
+.orb-ring,.orb-ring2{position:absolute;border-radius:50%;
+pointer-events:none}
+.orb-ring{inset:-16px;
+background:conic-gradient(from 0deg,var(--sky),var(--indigo),
+var(--fuchsia),var(--orange),var(--sky));
+filter:blur(16px);opacity:.5;
+animation:spin 9s linear infinite}
+.orb-ring2{inset:-5px;
+background:conic-gradient(from 180deg,var(--fuchsia),var(--sky),
+var(--orange),var(--indigo),var(--fuchsia));
+filter:blur(2.5px);opacity:.75;
+animation:spin 6s linear infinite reverse}
+.orb.on .orb-ring,.orb.busy .orb-ring{opacity:.95;
+animation-duration:2.6s}
+.orb.on .orb-ring2,.orb.busy .orb-ring2{opacity:1;
+animation-duration:1.8s}
+@keyframes spin{to{transform:rotate(360deg)}}
+#rec{position:absolute;inset:7px;border-radius:50%;border:0;
+cursor:pointer;font-family:inherit;color:#fff;font-weight:600;
+font-size:14px;letter-spacing:.03em;
+background:radial-gradient(circle at 32% 26%,#1d1d26,#0b0b0f 74%);
+box-shadow:inset 0 1px 0 rgba(255,255,255,.09);
+transition:transform .12s ease}
+#rec:active{transform:scale(.97)}
 #hint{color:var(--dim2);font-size:12.5px;margin-top:14px}
 #hint kbd{font:11px ui-monospace,Consolas,monospace;color:var(--dim);
 background:var(--card2);border:1px solid var(--line2);border-radius:6px;
@@ -83,12 +104,16 @@ text-transform:uppercase;color:var(--dim2);margin:0 0 9px}
 .chip{display:inline-flex;align-items:center;gap:8px;
 border:1px solid var(--line);border-radius:999px;padding:7px 14px;
 font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;
-background:var(--card);transition:border-color .15s ease,transform .15s ease}
+background:var(--card);transition:transform .15s ease,border-color .15s ease}
 .chip::before{content:"";width:6px;height:6px;border-radius:50%;
 background:var(--dot)}
-.chip:hover{border-color:rgba(139,92,246,.5);transform:translateY(-1px)}
-.c1{--dot:var(--rose)}.c2{--dot:var(--teal)}.c3{--dot:var(--amber)}
-.c4{--dot:var(--violet)}.c5{--dot:#60a5fa}.c6{--dot:var(--emerald)}
+.chip:hover{transform:translateY(-1px)}
+.c1{--dot:var(--rose)}.c1:hover{border-color:rgba(251,113,133,.55)}
+.c2{--dot:var(--teal)}.c2:hover{border-color:rgba(45,212,191,.55)}
+.c3{--dot:var(--amber)}.c3:hover{border-color:rgba(245,158,11,.55)}
+.c4{--dot:var(--violet)}.c4:hover{border-color:rgba(139,92,246,.55)}
+.c5{--dot:#60a5fa}.c5:hover{border-color:rgba(96,165,250,.55)}
+.c6{--dot:var(--emerald)}.c6:hover{border-color:rgba(52,211,153,.55)}
 
 .typerow{display:flex;gap:10px;padding:14px}
 #typetext{flex:1;font-family:inherit;font-size:14px;color:var(--ink);
@@ -106,7 +131,10 @@ transition:filter .15s ease,transform .15s ease}
 #typego:hover{filter:brightness(1.1)}
 #typego:active{transform:translateY(1px)}
 
-.result{padding:20px;display:none}
+.result{padding:20px;display:none;position:relative;overflow:hidden}
+.result::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
+background:linear-gradient(90deg,var(--sky),var(--fuchsia),var(--orange));
+opacity:.85}
 .result .row{margin:13px 0}
 .result .row:first-child{margin-top:0}
 .result .who{font-size:10.5px;font-weight:600;letter-spacing:.14em;
@@ -114,7 +142,10 @@ text-transform:uppercase;color:var(--dim2);display:block;margin-bottom:4px}
 .result .heard{font-size:16px}
 .result .fixed{font-size:14px;color:var(--emerald);font-weight:500}
 .result #intent{font-size:14px;color:var(--dim)}
-.result .reply{font-size:16px;font-weight:500}
+.result .reply{font-size:16.5px;font-weight:600;
+background:linear-gradient(90deg,#c4b5fd,#e879f9 55%,#fb923c);
+-webkit-background-clip:text;background-clip:text;
+-webkit-text-fill-color:transparent}
 .result .meta{font-size:11.5px;color:var(--dim2);margin-top:14px}
 #note{display:none;color:var(--amber);font-size:12.5px;margin-top:12px;
 padding:10px 13px;border:1px solid rgba(245,158,11,.25);
@@ -157,7 +188,7 @@ font-variant-numeric:tabular-nums}
 
   <div class="steps">
     <div class="card step s1"><b>1 · Talk</b>
-      <span>tap the mic, speak, tap again — or type below</span></div>
+      <span>tap the orb, speak, tap again — or type below</span></div>
     <div class="card step s2"><b>2 · Understand</b>
       <span>it detects the language and fixes its known mistakes</span></div>
     <div class="card step s3"><b>3 · Teach</b>
@@ -165,7 +196,11 @@ font-variant-numeric:tabular-nums}
   </div>
 
   <div class="micwrap">
-    <button id="rec" aria-label="start recording">TAP TO TALK</button>
+    <div class="orb" id="orb">
+      <div class="orb-ring"></div>
+      <div class="orb-ring2"></div>
+      <button id="rec" aria-label="start recording">TAP TO TALK</button>
+    </div>
     <div id="hint">press <kbd>space</kbd> to start — press again to stop
       · no mic? type below</div>
   </div>
@@ -223,8 +258,9 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",
 ">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const DEMO=new URLSearchParams(location.search); // ?demo=&teach= for captures
+const orb=$("orb");
 let last=null, recState="idle", stream=null, ctx=null, processor=null,
-    chunks=[], tick=null, audio=null;
+    chunks=[], tick=null, audio=null, lvl=0;
 
 // ---- footer stats -------------------------------------------------- //
 async function poll(){
@@ -270,13 +306,19 @@ async function toggle(){
     processor=ctx.createScriptProcessor(4096,1,1);   // kept referenced!
     chunks=[];
     processor.onaudioprocess=e=>{
-      if(recState==="recording")
-        chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      if(recState!=="recording")return;
+      const d=e.inputBuffer.getChannelData(0);
+      chunks.push(new Float32Array(d));
+      let s=0;for(let i=0;i<d.length;i+=8)s+=d[i]*d[i];   // voice level
+      const r=Math.sqrt(s/(d.length/8));
+      lvl=Math.min(1,lvl*0.55+r*2.4);                     // smooth rise
+      orb.style.setProperty("--lvl",lvl.toFixed(3));
     };
     src.connect(processor);processor.connect(ctx.destination);
     recState="recording";
-    $("rec").classList.add("on");$("rec").textContent="● LISTENING — TAP TO STOP";
-    $("hint").textContent="speak now — tap the button when done";
+    orb.classList.add("on");
+    $("rec").textContent="● SPEAK NOW";
+    $("hint").textContent="the orb listens with you — tap it when done";
     $("status").className="";$("status").textContent="";
     const t0=Date.now();tick=setInterval(()=>{
       $("status").textContent="recording… "+((Date.now()-t0)/1000).toFixed(1)+" s";
@@ -285,7 +327,9 @@ async function toggle(){
 }
 async function stop(){
   recState="idle";clearInterval(tick);
-  $("rec").classList.remove("on");$("rec").textContent="TAP TO TALK";
+  orb.classList.remove("on");orb.classList.add("busy");
+  orb.style.setProperty("--lvl",0);
+  $("rec").textContent="THINKING…";
   $("hint").innerHTML='press <kbd>space</kbd> to start — press again to stop · no mic? type below';
   $("status").textContent="thinking…";
   try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}
@@ -293,7 +337,9 @@ async function stop(){
   try{processor&&processor.disconnect()}catch(e){}
   try{ctx&&ctx.close()}catch(e){}
   const total=chunks.reduce((a,c)=>a+c.length,0);
-  if(total<8000){err("too short — speak a full sentence, then stop");return}
+  if(total<8000){orb.classList.remove("busy");
+    $("rec").textContent="TAP TO TALK";
+    err("too short — speak a full sentence, then stop");return}
   const all=new Float32Array(total);let o=0;
   for(const c of chunks){all.set(c,o);o+=c.length}
   try{
@@ -301,6 +347,7 @@ async function stop(){
       {method:"POST",headers:{"Content-Type":"audio/wav"},body:wav16k(all,rate)});
     show(await r.json());
   }catch(e){err("server unreachable")}
+  orb.classList.remove("busy");$("rec").textContent="TAP TO TALK";
 }
 function wav16k(buf,from){
   const ratio=from/16000,n=Math.floor(buf.length/ratio);
@@ -327,6 +374,7 @@ async function sendText(){
   const text=$("typetext").value.trim();
   if(!text){err("type a command first — or click an example above");return}
   $("status").className="";$("status").textContent="thinking…";
+  orb.classList.add("busy");
   try{
     const r=await fetch("/text",{method:"POST",
       headers:{"Content-Type":"application/json"},
@@ -334,6 +382,7 @@ async function sendText(){
                            audio:DEMO.get("audio","1")})});
     show(await r.json());
   }catch(e){err("server unreachable")}
+  orb.classList.remove("busy");
 }
 
 // ---- show any result ------------------------------------------------ //
