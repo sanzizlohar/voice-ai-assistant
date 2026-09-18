@@ -489,8 +489,8 @@ function renderConsents(list){
   c.innerHTML="<h3>🔒 Permission requested</h3>"+list.map(x=>
     "<div class='ccard'><b>"+esc(x.tool)+"</b>"+
     "<pre>"+esc(JSON.stringify(x.args))+"</pre>"+
-    "<button class='allow' onclick='resolveConsent(\""+x.id+"\",true)'>Allow</button>"+
-    "<button class='deny' onclick='resolveConsent(\""+x.id+"\",false)'>Deny</button></div>").join("");
+    "<button class='allow' onclick='resolveConsent(\\\""+x.id+"\\\",true)'>Allow</button>"+
+    "<button class='deny' onclick='resolveConsent(\\\""+x.id+"\\\",false)'>Deny</button></div>").join("");
 }
 window.resolveConsent=async(id,allow)=>{
   try{await fetch("/api/consent",{method:"POST",
