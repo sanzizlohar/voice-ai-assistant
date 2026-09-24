@@ -153,8 +153,8 @@ class TestPickChatModel(unittest.TestCase):
         from voice_ai.llm.config import pick_chat_model
         models = ["meta-llama/llama-prompt-guard-2-86m",
                   "canopylabs/orpheus-v1-english",
-                  "openai/gpt-oss-120b", "allam-2-7b"]
-        self.assertEqual(pick_chat_model(models), "openai/gpt-oss-120b")
+                  "openai/gpt-oss-20b", "allam-2-7b"]
+        self.assertEqual(pick_chat_model(models), "allam-2-7b")
 
     def test_garbage_never_stored(self):
         from voice_ai.llm.config import pick_chat_model
@@ -181,15 +181,28 @@ class TestDiscovery(unittest.TestCase):
                     os.environ[k] = v
 
     def test_no_brain_is_none_or_ollama(self):
+        import json
+        import tempfile
         old = {k: os.environ.pop(k, None) for k in
-               ("VIA_LLM_BASE_URL", "VIA_LLM_API_KEY", "VIA_LLM_MODEL")}
+               ("VIA_LLM_BASE_URL", "VIA_LLM_API_KEY", "VIA_LLM_MODEL",
+                "VIA_CONFIG_PATH")}
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json",
+                                          delete=False)
+        json.dump({"provider": "groq",
+                   "base_url": "http://127.0.0.1:9/v1",
+                   "model": "undefined", "api_key": "k"}, tmp)
+        tmp.close()
+        os.environ["VIA_CONFIG_PATH"] = tmp.name
         try:
-            engine = get_llm()  # None, unless a local Ollama is running
-            self.assertTrue(engine is None or hasattr(engine, "chat"))
+            engine = get_llm()  # dead endpoint validates to no brain
+            self.assertIsNone(engine)
         finally:
             for k, v in old.items():
-                if v is not None:
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
                     os.environ[k] = v
+            os.unlink(tmp.name)
 
 
 class TestActionGuard(unittest.TestCase):

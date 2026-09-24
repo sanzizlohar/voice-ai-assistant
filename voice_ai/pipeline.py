@@ -449,34 +449,34 @@ class Assistant:
         return out
 
     def set_llm(self, engine) -> None:
-        """Hot-swap the brain (dashboard settings / CLI) — and refresh the
-        ASR engine so cloud Whisper activates the moment a Groq/OpenAI
-        brain is connected (Bengali/Hindi voice quality)."""
+        """Hot-swap the brain (dashboard settings / CLI)."""
         self.llm = engine
         self.agent = (LlmAgent(engine, self.actions)
                       if engine is not None else None)
         self.events.add("info", "llm", "brain_set",
                         engine.name if engine else "no brain")
-        try:
-            import threading
-            from .asr.base import get_engine
-            def swap():
-                try:
-                    new_asr = get_engine("auto")
-                    # only ever UPGRADE to cloud ASR; never downgrade a
-                    # locally forced engine (and skip no-op swaps)
-                    if (new_asr.name.startswith("cloud:")
-                            and new_asr.name != self.asr.name):
-                        self.asr = new_asr
-                        self.events.add("info", "asr", "engine_set",
-                                        new_asr.name)
-                except Exception as exc:  # noqa: BLE001
-                    self.events.add("warning", "asr", "swap_failed",
-                                    str(exc)[:120])
-            threading.Thread(target=swap, daemon=True,
-                             name="via-asr-swap").start()
-        except Exception:  # noqa: BLE001
-            pass
+
+    def refresh_asr(self) -> None:
+        """Upgrade ASR to cloud Whisper when the brain provider supports
+        it (Bengali/Hindi voice quality) — upgrade-only, never downgrades
+        a locally forced engine. Called by the API layer on brain connect."""
+        import threading
+
+        def swap():
+            try:
+                from .asr.base import get_engine
+                new_asr = get_engine("auto")
+                if (new_asr.name.startswith("cloud:")
+                        and new_asr.name != self.asr.name):
+                    self.asr = new_asr
+                    self.events.add("info", "asr", "engine_set",
+                                    new_asr.name)
+            except Exception as exc:  # noqa: BLE001
+                self.events.add("warning", "asr", "swap_failed",
+                                str(exc)[:120])
+
+        threading.Thread(target=swap, daemon=True,
+                         name="via-asr-swap").start()
 
     def _persist_agent_note(self, text: str) -> None:
         """note_sink for the agent's take_note tool."""

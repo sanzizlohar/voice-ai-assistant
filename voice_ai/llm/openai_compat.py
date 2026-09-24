@@ -12,6 +12,10 @@ import urllib.request
 
 from .base import LlmEngine
 
+# Groq sits behind Cloudflare: custom User-Agents get
+# error 1010 (bot signature ban) — look like a browser
+BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
 
 class OpenAICompatLlm(LlmEngine):
     def __init__(self, base_url: str, api_key: str = "", model: str = ""):
@@ -27,9 +31,10 @@ class OpenAICompatLlm(LlmEngine):
             "model": self.model,
             "messages": messages,
             "temperature": 0.4,
+            "tool_choice": "auto",
         }).encode()
         headers = {"Content-Type": "application/json",
-                   "User-Agent": "via-assistant"}
+                   "User-Agent": BROWSER_UA}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         req = urllib.request.Request(

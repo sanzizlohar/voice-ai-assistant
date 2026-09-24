@@ -23,6 +23,7 @@ import urllib.request
 import uuid
 
 from .base import AsrEngine, Hypothesis
+from ..llm.openai_compat import BROWSER_UA
 
 
 def _script_lang(text: str, fallback: str) -> str:
@@ -102,7 +103,7 @@ class CloudWhisperAsr(AsrEngine):
         body = _multipart(fields, "audio.wav", buf.getvalue(), boundary)
         headers = {"Content-Type":
                    f"multipart/form-data; boundary={boundary}",
-                   "User-Agent": "via"}
+                   "User-Agent": BROWSER_UA}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         req = urllib.request.Request(

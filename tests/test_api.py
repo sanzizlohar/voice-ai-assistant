@@ -1,5 +1,6 @@
 """HTTP API tests: transcribe, tts, feedback, health, metrics, saturation."""
 import base64
+import os
 import io
 import json
 import threading
@@ -140,6 +141,10 @@ class TestApi(unittest.TestCase):
             def log_message(self, *args):
                 pass
 
+        from voice_ai.llm.config import config_path
+        saved_brain = None
+        if os.path.exists(config_path()):
+            saved_brain = open(config_path(), "rb").read()
         srv = ThreadingHTTPServer(("127.0.0.1", 0), FakeLLM)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
@@ -168,8 +173,15 @@ class TestApi(unittest.TestCase):
             self.assertIn("Homer", result["reply"])
         finally:
             srv.shutdown()
-            from voice_ai.llm.config import clear_config
-            clear_config()
+            # restore whatever brain config the user had (never wipe it)
+            if saved_brain is not None:
+                with open(config_path(), "wb") as fh:
+                    fh.write(saved_brain)
+            else:
+                try:
+                    os.remove(config_path())
+                except OSError:
+                    pass
             outer.assistant.set_llm(None)
             outer.assistant.asr = OfflineCodecAsr()
 

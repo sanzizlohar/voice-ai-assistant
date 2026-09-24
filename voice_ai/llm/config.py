@@ -13,6 +13,8 @@ import json
 import os
 import urllib.request
 
+from .openai_compat import BROWSER_UA
+
 PROVIDERS = {
     "ollama": {
         "label": "Ollama (local, free)",
@@ -58,7 +60,11 @@ PROVIDERS = {
 
 def config_path() -> str:
     """Stable location (independent of the server's cwd) — the brain
-    survives restarting the server from any folder."""
+    survives restarting the server from any folder. Tests can point
+    VIA_CONFIG_PATH elsewhere."""
+    override = os.environ.get("VIA_CONFIG_PATH")
+    if override:
+        return override
     d = os.path.join(os.path.expanduser("~"), ".via")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, "brain.json")
@@ -75,6 +81,12 @@ def load_config() -> dict | None:
 
 
 GARBAGE_MODELS = ("", "undefined", "null", "none")
+
+
+def provider_needs_validation(provider: str) -> bool:
+    """Cloud providers rotate models; validate the saved name against
+    their live /models list at startup."""
+    return provider in ("groq", "openai", "openrouter", "custom")
 
 
 def _provider_for_url(base_url: str, provider: str) -> str:
@@ -123,9 +135,52 @@ def clear_config() -> bool:
 
 
 BAD_MODEL_PARTS = ("prompt-guard", "guard", "whisper", "tts", "orpheus",
-                   "embed", "safeguard", "moderation")
-PREFERRED_PARTS = ("llama-3.3", "llama-3.1", "gpt-oss", "kimi", "qwen",
-                   "deepseek", "70b", "instruct", "gemma")
+                   "embed", "safeguard", "moderation", "gpt-oss")
+PREFERRED_PARTS = ("llama-3.3", "llama-3.1", "kimi", "qwen",
+                   "deepseek", "instruct", "gemma", "70b")
+
+
+def _chat_ok(base_url: str, api_key: str, model: str) -> bool:
+    """True when a tiny chat call succeeds (some listed models are
+    gated per-account — only a real call proves access)."""
+    import urllib.error
+    body = json.dumps({"model": model, "tool_choice": "auto",
+                       "max_tokens": 5,
+                       "messages": [{"role": "user",
+                                     "content": "Say OK"}]}).encode()
+    req = urllib.request.Request(
+        base_url.rstrip("/") + "/chat/completions", data=body,
+        headers={"Content-Type": "application/json",
+                 "User-Agent": BROWSER_UA,
+                 "Authorization": f"Bearer {api_key}"} if api_key else
+        {"Content-Type": "application/json",
+         "User-Agent": BROWSER_UA}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def working_chat_model(base_url: str, api_key: str,
+                       max_attempts: int = 3) -> str | None:
+    """A model that ACTUALLY works right now: live /models list →
+    blacklist filter → preferred ordering → real chat-call probe."""
+    models = probe(engine_from_config(
+        {"base_url": base_url, "api_key": api_key, "model": ""})
+    ).get("models") or []
+    clean = [m for m in models if m and not any(
+        bad in m.lower() for bad in BAD_MODEL_PARTS)]
+    ordered = []
+    for part in PREFERRED_PARTS:
+        for m in clean:
+            if part in m.lower() and m not in ordered:
+                ordered.append(m)
+    ordered += [m for m in clean if m not in ordered]
+    for m in ordered[:max_attempts]:
+        if _chat_ok(base_url, api_key, m):
+            return m
+    return ordered[0] if ordered else None
 
 
 def pick_chat_model(models: list) -> str | None:
@@ -144,7 +199,7 @@ def pick_chat_model(models: list) -> str | None:
 
 def engine_from_config(cfg: dict):
     """Build an OpenAICompatLlm from a saved/env config dict."""
-    from .openai_compat import OpenAICompatLlm
+    from .openai_compat import BROWSER_UA, OpenAICompatLlm
     return OpenAICompatLlm(cfg.get("base_url", ""),
                            cfg.get("api_key", ""),
                            cfg.get("model", ""))
@@ -152,8 +207,9 @@ def engine_from_config(cfg: dict):
 
 def probe(engine) -> dict:
     """Cheap reachability check: GET /models with a short timeout."""
+    from .openai_compat import BROWSER_UA
     try:
-        headers = {"User-Agent": "via"}
+        headers = {"User-Agent": BROWSER_UA}
         if engine.api_key:
             headers["Authorization"] = f"Bearer {engine.api_key}"
         req = urllib.request.Request(engine.base_url + "/models",
@@ -187,11 +243,24 @@ def resolve() -> tuple:
             cfg["model"] = picked
             save_config(cfg["provider"], api_key=cfg.get("api_key", ""),
                         model=picked, base_url=cfg.get("base_url", ""))
+        if provider_needs_validation(cfg.get("provider")):
+            try:
+                live = working_chat_model(cfg["base_url"],
+                                          cfg.get("api_key", ""))
+                if live and live != cfg.get("model"):
+                    cfg["model"] = live
+                    save_config(cfg["provider"],
+                                api_key=cfg.get("api_key", ""),
+                                model=live,
+                                base_url=cfg.get("base_url", ""))
+                    return engine_from_config(cfg), cfg["provider"]
+            except Exception:  # noqa: BLE001 — boot must survive
+                pass
         return engine_from_config(cfg), cfg["provider"]
     # local ollama probe (0.6 s — boot stays fast)
     try:
         req = urllib.request.Request(
-            "http://localhost:11434/v1/models", headers={"User-Agent": "via"})
+            "http://localhost:11434/v1/models", headers={"User-Agent": BROWSER_UA})
         with urllib.request.urlopen(req, timeout=0.6) as resp:
             data = json.loads(resp.read().decode())
         models = [m.get("id") for m in data.get("data", []) if m.get("id")]
