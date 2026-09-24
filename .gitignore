@@ -28,3 +28,6 @@ venv/
 
 # brain settings (contains api key)
 via_llm.json
+
+# personal draft (do not commit)
+LINKEDIN_POST.txt
